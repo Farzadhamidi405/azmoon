@@ -69,6 +69,9 @@ Route::prefix("v1")->group(function () {
             ]);
 
 
+            // ─── Exam Sessions Monitoring ────────────────────────
+            Route::get('sessions', [AttemptController::class, 'adminIndex']);
+
             // ─── User Management ───────────────────────────────────
             // بند 3 SRS — فقط Super Admin
             Route::prefix('users')->group(function () {

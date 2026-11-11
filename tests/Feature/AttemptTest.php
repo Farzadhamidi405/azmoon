@@ -423,7 +423,7 @@ class AttemptTest extends TestCase
             $response = $this->actingAs($candidate, 'candidate')
                 ->postJson('/api/v1/candidate/attempts/start');
 
-            $response->assertStatus(404)
+            $response->assertStatus(422)
                 ->assertJsonPath('success', false);
 
             $this->assertDatabaseCount('attempts', 0);

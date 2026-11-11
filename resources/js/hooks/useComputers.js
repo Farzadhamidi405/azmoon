@@ -176,3 +176,5 @@ export function useComputers({ enabled = true } = {}) {
 
   return { items, pagination, query, loading, error, setFilters, setPage, reload: load, create, update, updateStatus, remove };
 }
+
+export default useComputers;
