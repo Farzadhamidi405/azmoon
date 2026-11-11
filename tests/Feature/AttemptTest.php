@@ -354,4 +354,79 @@ class AttemptTest extends TestCase
         $response->assertStatus(422)
             ->assertJsonPath('success', false);
     }
+
+    // ─── Phase A: Exam Running Status Tests ────────────────────
+
+    #[Test]
+    public function candidate_can_start_exam_when_exam_status_is_running(): void
+    {
+        $data = $this->makeCandidate();
+        $candidate = $data['candidate'];
+        $data['exam']->update(['status' => 'running']);
+
+        $response = $this->actingAs($candidate, 'candidate')
+            ->postJson('/api/v1/candidate/attempts/start');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('is_resume', false)
+            ->assertJsonPath('data.attempt.status', 'in_progress');
+
+        $this->assertDatabaseCount('attempts', 1);
+        $this->assertDatabaseHas('attempts', [
+            'candidate_id' => $candidate->id,
+            'exam_id'      => $data['exam']->id,
+            'status'       => 'in_progress',
+        ]);
+    }
+
+    #[Test]
+    public function candidate_can_resume_active_attempt_when_exam_status_is_running(): void
+    {
+        $data = $this->makeCandidate();
+        $candidate = $data['candidate'];
+        $data['exam']->update(['status' => 'running']);
+
+        // شروع اول
+        $firstResponse = $this->actingAs($candidate, 'candidate')
+            ->postJson('/api/v1/candidate/attempts/start');
+
+        $firstResponse->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('is_resume', false);
+
+        $attemptId = $firstResponse->json('data.attempt.id');
+
+        // شروع دوم — باید همان Attempt قبلی بدون ایجاد رکورد جدید بازیابی شود
+        $resumeResponse = $this->actingAs($candidate, 'candidate')
+            ->postJson('/api/v1/candidate/attempts/start');
+
+        $resumeResponse->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('is_resume', true)
+            ->assertJsonPath('data.attempt.id', $attemptId);
+
+        // تعداد رکوردهای Attempt باید ثابت بماند
+        $this->assertDatabaseCount('attempts', 1);
+    }
+
+    #[Test]
+    public function candidate_cannot_start_exam_when_exam_status_is_neither_published_nor_running(): void
+    {
+        $invalidStatuses = ['draft', 'under_review', 'completed', 'archived'];
+
+        foreach ($invalidStatuses as $status) {
+            $data = $this->makeCandidate();
+            $candidate = $data['candidate'];
+            $data['exam']->update(['status' => $status]);
+
+            $response = $this->actingAs($candidate, 'candidate')
+                ->postJson('/api/v1/candidate/attempts/start');
+
+            $response->assertStatus(404)
+                ->assertJsonPath('success', false);
+
+            $this->assertDatabaseCount('attempts', 0);
+        }
+    }
 }

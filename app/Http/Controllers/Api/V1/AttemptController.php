@@ -43,7 +43,7 @@ class AttemptController extends Controller
             // ۱. خواندن اسنپ‌شات اولیه خارج از تراکنش
             $snapshotAssignment = CandidateAssignment::with(['exam', 'computer', 'shift'])
                 ->where('candidate_id', $candidate->id)
-                ->whereHas('exam', fn ($q) => $q->where('status', 'published'))
+                ->whereHas('exam', fn ($q) => $q->whereIn('status', ['published', 'running']))
                 ->latest()
                 ->first();
 
@@ -107,7 +107,7 @@ class AttemptController extends Controller
                     $lockedAssignment = $lockedCandidateAssignments->firstWhere('id', $snapshotAssignmentId);
 
                     $latestPublishedAssignmentId = CandidateAssignment::where('candidate_id', $candidate->id)
-                        ->whereHas('exam', fn ($q) => $q->where('status', 'published'))
+                        ->whereHas('exam', fn ($q) => $q->whereIn('status', ['published', 'running']))
                         ->latest()
                         ->lockForUpdate()
                         ->value('id');
@@ -151,7 +151,7 @@ class AttemptController extends Controller
                         || $latestPublishedAssignmentId === null
                         || (int) $latestPublishedAssignmentId !== $snapshotAssignmentId
                         || !$lockedAssignment->exam
-                        || $lockedAssignment->exam->status !== 'published'
+                        || !in_array($lockedAssignment->exam->status, ['published', 'running'], true)
                         || (int) $lockedAssignment->exam_id !== $snapshotExamId
                         || ($lockedAssignment->shift_id ? (int) $lockedAssignment->shift_id : null) !== $snapshotShiftId
                         || ($lockedAssignment->computer_id ? (int) $lockedAssignment->computer_id : null) !== $snapshotAssignedComputerId
