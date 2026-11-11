@@ -11,10 +11,25 @@ import formatDate from '../../lib/formatDate.js';
 import { notifySuccess } from '../../lib/notify.js';
 
 export default function BackupsPage() {
-  const { items, loading, reload, createBackup, removeBackup } = useBackups();
+  const { items, loading, reload, createBackup, removeBackup, downloadBackup } = useBackups();
   const [creating, setCreating] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);
+  const [downloadError, setDownloadError] = useState(null);
   const [deletingBackup, setDeletingBackup] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  const handleDownload = async (row) => {
+    setDownloadingId(row.id);
+    setDownloadError(null);
+    try {
+      await downloadBackup(row);
+      notifySuccess(`دانلود فایل پشتیبان «${row.filename || row.id}» با موفقیت آغاز شد.`);
+    } catch (err) {
+      setDownloadError(err.message || 'خطا در دانلود فایل پشتیبان.');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const columns = useMemo(
     () => [
@@ -23,8 +38,8 @@ export default function BackupsPage() {
         title: 'نام فایل پشتیبان',
         render: (fn, row) => (
           <div>
-            <div className="font-mono font-bold text-navy text-xs">{fn || row.name || 'backup.sql.gz'}</div>
-            <div className="text-[11px] text-ink-soft">نوع: دیتابیس کامل SQLite/MySQL + فایل‌های ضمیمه</div>
+            <div className="font-mono font-bold text-navy text-xs">{fn || row.name || `backup-${row.id}.sql.gz`}</div>
+            <div className="text-[11px] text-ink-soft">نوع: دیتابیس کامل + ضمایم</div>
           </div>
         ),
       },
@@ -44,8 +59,15 @@ export default function BackupsPage() {
       },
       {
         key: 'status',
-        title: 'وضعیت سلامت',
-        render: () => <Badge tone="teal">صحیح و تأییدشده</Badge>,
+        title: 'وضعیت',
+        render: (st, row) => {
+          const status = st || row.status || 'completed';
+          return (
+            <Badge tone={status === 'completed' ? 'teal' : status === 'failed' ? 'bad' : 'pending'}>
+              {status === 'completed' ? 'تکمیل‌شده' : status === 'failed' ? 'ناموفق' : 'در حال پردازش'}
+            </Badge>
+          );
+        },
       },
       {
         key: 'actions',
@@ -53,18 +75,20 @@ export default function BackupsPage() {
         align: 'end',
         render: (_, row) => (
           <div className="flex items-center justify-end gap-1">
-            <a
-              href={`/api/v1/admin/backups/${row.id}/download`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-outline btn-sm inline-flex items-center"
+            <Button
+              size="sm"
+              variant="outline"
+              loading={downloadingId === row.id}
+              disabled={downloadingId === row.id || row.status === 'failed'}
+              onClick={() => handleDownload(row)}
             >
               دانلود
-            </a>
+            </Button>
             <Button
               size="sm"
               variant="ghost"
               className="text-red hover:bg-red-soft"
+              disabled={downloadingId === row.id}
               onClick={() => setDeletingBackup(row)}
             >
               حذف
@@ -73,11 +97,12 @@ export default function BackupsPage() {
         ),
       },
     ],
-    []
+    [downloadingId]
   );
 
   const handleCreate = async () => {
     setCreating(true);
+    setDownloadError(null);
     try {
       await createBackup();
       notifySuccess('فایل پشتیبان کامل سیستم با موفقیت ایجاد شد.');
@@ -110,10 +135,23 @@ export default function BackupsPage() {
         }
       />
 
+      {/* Download Error Banner */}
+      {downloadError && (
+        <div className="card mb-4 p-4 border-red/30 bg-red-soft/20 text-xs text-red flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{downloadError}</span>
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => setDownloadError(null)}>
+            بستن
+          </Button>
+        </div>
+      )}
+
       <div className="card mb-4 p-4 bg-panel border-line text-xs space-y-1">
         <div className="font-bold text-navy">امنیت داده‌ها در شرایط بحرانی (Disaster Recovery):</div>
         <div className="text-ink-soft leading-relaxed">
-          نسخه‌های پشتیبان شامل کلیه سوالات، اسنپ‌شات‌های پاسخ متقاضیان، لاگ‌های حسابرسی و کانفیگ سیستم هستند. توصیه می‌شود پیش از شروع هر شیفت آزمون یک نسخه تهیه شود.
+          نسخه‌های پشتیبان شامل کلیه سوالات، اسنپ‌شات‌های پاسخ متقاضیان، لاگ‌های حسابرسی و پیکربندی سیستم هستند. عملیات دانلود با اعتبارسنجی نشست امن مدیر ارشد انجام می‌گیرد.
         </div>
       </div>
 
