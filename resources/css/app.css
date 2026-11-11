@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/* Design tokens from the approved UI/UX prototype (v3-2). */
+@theme {
+  --color-navy: #152341;
+  --color-navy-2: #1E3057;
+  --color-navy-3: #28406F;
+  --color-paper: #F5F3ED;
+  --color-panel: #FFFFFF;
+  --color-ink: #1B1B18;
+  --color-ink-soft: #68665F;
+  --color-line: #E5E1D4;
+  --color-teal: #2E7A5F;
+  --color-teal-soft: #E4F0EA;
+  --color-gold: #B08A3E;
+  --color-gold-soft: #F5EEDC;
+  --color-amber: #B5791A;
+  --color-amber-soft: #FBF0DD;
+  --color-red: #A23B2E;
+  --color-red-soft: #F7E7E3;
+  --color-line-soft: #EFECE2;
+  --color-row-hover: #FBFAF6;
+  --color-chip: #EDEBE4;
+  --color-ok: #3C9C74;
+  /* Added in 14.3: nav link ink (prototype #AEB8D2) and candidate/guest shell background (prototype #EFEDE4). */
+  --color-nav-ink: #AEB8D2;
+  --color-shell: #EFEDE4;
+
+  --shadow-ds: 0 1px 2px rgba(21, 35, 65, 0.04), 0 6px 20px rgba(21, 35, 65, 0.06);
+
+  --font-sans: 'Vazirmatn', Tahoma, sans-serif;
+
+  /* Named "ds" so Tailwind's default rounded-md / rounded-lg are not overridden. */
+  --radius-ds: 10px;
+  --radius-ds-lg: 14px;
+  --radius-ds-sm: 8px;
+}
+
+/* RTL is set once on <html lang="fa" dir="rtl"> in views/app.blade.php. */
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
