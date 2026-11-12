@@ -5,6 +5,7 @@ import {
   canViewExams,
   canCreateExam,
   canViewQuestions,
+  canApproveQuestions,
 } from '../lib/permissions.js';
 
 // Admin menu source of truth. UI convenience only: the Backend still authorizes every request.
@@ -37,10 +38,12 @@ const NAV_CONFIG = [
     ],
   },
   {
-    id: 'questions',
-    label: '\u0628\u0627\u0646\u06A9 \u0633\u0648\u0627\u0644\u0627\u062A', // Question bank
-    to: '/admin/questions',
-    visible: canViewQuestions,
+    id: 'questions-group',
+    label: '\u0628\u0627\u0646\u06A9 \u0633\u0648\u0627\u0644\u0627\u062A', // Question bank (group)
+    items: [
+      { id: 'questions-list', label: '\u0644\u06CC\u0633\u062A \u0633\u0648\u0627\u0644\u0627\u062A', to: '/admin/questions', visible: canViewQuestions },
+      { id: 'questions-approval', label: '\u062A\u0623\u06CC\u06CC\u062F \u0633\u0648\u0627\u0644\u0627\u062A', to: '/admin/questions/approval', visible: canApproveQuestions },
+    ],
   },
   {
     id: 'candidates',

@@ -29,6 +29,7 @@ import ShiftsPage from './pages/admin/ShiftsPage.jsx';
 import ExamsPage from './pages/admin/ExamsPage.jsx';
 import ExamCreatePage from './pages/admin/ExamCreatePage.jsx';
 import QuestionsPage from './pages/admin/QuestionsPage.jsx';
+import QuestionApprovalPage from './pages/admin/QuestionApprovalPage.jsx';
 import CandidatesPage from './pages/admin/CandidatesPage.jsx';
 
 // Monitoring & Results Pages
@@ -77,6 +78,7 @@ export default function App() {
                   <Route path="exams" element={<ExamsPage />} />
                   <Route path="exams/create" element={<ExamCreatePage />} />
                   <Route path="questions" element={<QuestionsPage />} />
+                  <Route path="questions/approval" element={<QuestionApprovalPage />} />
                   <Route path="candidates" element={<CandidatesPage />} />
                   <Route path="faculties" element={<FacultiesPage />} />
                   <Route path="subjects" element={<SubjectsPage />} />
