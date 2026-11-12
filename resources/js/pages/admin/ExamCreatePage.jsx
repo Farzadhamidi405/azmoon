@@ -7,6 +7,7 @@ import {
   Input,
   PageHeader,
   Select,
+  Textarea,
 } from '../../components/ui/index.js';
 import useExams from '../../hooks/useExams.js';
 import useSubjects from '../../hooks/useSubjects.js';
@@ -14,26 +15,32 @@ import { notifySuccess } from '../../lib/notify.js';
 
 export default function ExamCreatePage() {
   const navigate = useNavigate();
-  const { create } = useExams();
+  const { create, changeStatus } = useExams();
   const { items: subjects } = useSubjects();
 
-  const [step, setStep] = useState(1); // 1: Details, 2: Sections, 3: Confirmation
   const [submitting, setSubmitting] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [errors, setErrors] = useState({});
 
-  // Form State
+  // Form State matching Prototype v3 and Laravel Backend Validation
   const [formData, setFormData] = useState({
-    title: '',
-    code: '',
+    title: 'English Language Examination',
+    description: 'امتحان زبان انگلیسی برای متقاضیان بست‌های کادری',
     subject_id: '',
-    total_score: 100,
     duration_minutes: 60,
-    passing_percentage: 50,
-    disconnect_grace_period_seconds: 120,
+    total_marks: 100,
+    pass_marks: 60,
+    start_date: '۱۴۰۴/۰۶/۱۲ — ۰۸:۰۰',
+    end_date: '۱۴۰۴/۰۶/۱۲ — ۱۶:۰۰',
+    allow_back_navigation: true,
+    randomize_questions: true,
+    randomize_options: true,
+    show_result_immediately: false,
     sections: [
-      { name: 'بخش اول: گرامر و واژگان', question_count: 20, points: 40 },
-      { name: 'بخش دوم: درک مطلب (Reading)', question_count: 15, points: 30 },
-      { name: 'بخش سوم: شنیداری (Listening)', question_count: 15, points: 30 },
+      { name: 'Grammar', count: 20, color: 'var(--gold)' },
+      { name: 'Vocabulary', count: 10, color: 'var(--teal)' },
+      { name: 'Reading', count: 10, color: 'var(--navy-3)' },
+      { name: 'Listening', count: 10, color: 'var(--amber)' },
     ],
   });
 
@@ -42,351 +49,258 @@ export default function ExamCreatePage() {
     setErrors((p) => ({ ...p, [field]: null }));
   };
 
-  const handleSectionChange = (index, field, val) => {
-    setFormData((p) => {
-      const nextSections = [...p.sections];
-      nextSections[index] = { ...nextSections[index], [field]: val };
-      return { ...p, sections: nextSections };
-    });
-  };
-
   const addSection = () => {
+    const name = prompt('نام بخش جدید را وارد نمایید:');
+    if (!name) return;
+    const count = Number(prompt('تعداد سوالات این بخش:', '10')) || 10;
     setFormData((p) => ({
       ...p,
-      sections: [
-        ...p.sections,
-        { name: `بخش جدید ${p.sections.length + 1}`, question_count: 10, points: 20 },
-      ],
+      sections: [...p.sections, { name, count, color: 'var(--navy-2)' }],
     }));
   };
 
-  const removeSection = (index) => {
-    if (formData.sections.length <= 1) return;
-    setFormData((p) => ({
-      ...p,
-      sections: p.sections.filter((_, i) => i !== index),
-    }));
+  const buildPayload = () => {
+    // Determine subject_id: selected or default to first available
+    const resolvedSubjectId = formData.subject_id || (subjects[0]?.id ? String(subjects[0].id) : '');
+
+    return {
+      title: formData.title.trim(),
+      description: formData.description?.trim() || null,
+      subject_id: Number(resolvedSubjectId),
+      duration_minutes: Number(formData.duration_minutes),
+      total_marks: Number(formData.total_marks),
+      pass_marks: Number(formData.pass_marks),
+      allow_back_navigation: Boolean(formData.allow_back_navigation),
+      randomize_questions: Boolean(formData.randomize_questions),
+      randomize_options: Boolean(formData.randomize_options),
+      show_result_immediately: Boolean(formData.show_result_immediately),
+    };
   };
 
-  const validateStep1 = () => {
-    const errs = {};
-    if (!formData.title.trim()) errs.title = 'وارد کردن عنوان آزمون الزامی است.';
-    if (!formData.code.trim()) errs.code = 'کد آزمون الزامی است.';
-    if (!formData.subject_id) errs.subject_id = 'انتخاب مضمون الزامی است.';
-    if (formData.duration_minutes < 5) errs.duration_minutes = 'حداقل مدت آزمون ۵ دقیقه است.';
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
-
-  const handleNext = () => {
-    if (step === 1) {
-      if (!validateStep1()) return;
-      setStep(2);
-    } else if (step === 2) {
-      setStep(3);
+  const handleSaveDraft = async () => {
+    const payload = buildPayload();
+    if (!payload.subject_id) {
+      setErrors({ subject_id: 'لطفاً مضمون آزمون را انتخاب نمایید.' });
+      return;
     }
-  };
 
-  const handleSubmit = async () => {
     setSubmitting(true);
+    setErrors({});
     try {
-      await create({
-        title: formData.title,
-        code: formData.code,
-        subject_id: formData.subject_id,
-        total_score: Number(formData.total_score),
-        duration_minutes: Number(formData.duration_minutes),
-        passing_percentage: Number(formData.passing_percentage),
-        disconnect_grace_period_seconds: Number(formData.disconnect_grace_period_seconds),
-      });
-      notifySuccess('آزمون جدید با موفقیت ایجاد شد.');
+      await create(payload);
+      notifySuccess('آزمون به صورت پیش‌نویس (Draft) ذخیره شد.');
       navigate('/admin/exams');
     } catch (err) {
-      if (err.fieldErrors) setErrors(err.fieldErrors);
+      if (err.fieldErrors) {
+        setErrors(err.fieldErrors);
+      } else if (err.response?.data?.errors) {
+        const extracted = {};
+        Object.entries(err.response.data.errors).forEach(([k, v]) => {
+          extracted[k] = Array.isArray(v) ? v[0] : v;
+        });
+        setErrors(extracted);
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const selectedSubject = subjects.find((s) => String(s.id) === String(formData.subject_id));
-  const totalSectionPoints = formData.sections.reduce((acc, s) => acc + Number(s.points || 0), 0);
-  const totalSectionQuestions = formData.sections.reduce((acc, s) => acc + Number(s.question_count || 0), 0);
+  const handlePublish = async () => {
+    const payload = buildPayload();
+    if (!payload.subject_id) {
+      setErrors({ subject_id: 'لطفاً مضمون آزمون را انتخاب نمایید.' });
+      return;
+    }
+
+    setPublishing(true);
+    setErrors({});
+    try {
+      const createdExam = await create(payload);
+      // Change status to published
+      if (createdExam?.id) {
+        try {
+          await changeStatus(createdExam.id, 'published');
+          notifySuccess('آزمون با موفقیت ایجاد و منتشر شد.');
+        } catch {
+          notifySuccess('آزمون ذخیره شد اما برای انتشار نیازمند سوالات است.');
+        }
+      }
+      navigate('/admin/exams');
+    } catch (err) {
+      if (err.fieldErrors) {
+        setErrors(err.fieldErrors);
+      } else if (err.response?.data?.errors) {
+        const extracted = {};
+        Object.entries(err.response.data.errors).forEach(([k, v]) => {
+          extracted[k] = Array.isArray(v) ? v[0] : v;
+        });
+        setErrors(extracted);
+      }
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   return (
     <>
       <PageHeader
-        title="ایجاد آزمون جدید (طرح سه‌مرحله‌ای)"
-        crumb={['آزمون‌ها', 'ایجاد آزمون']}
+        title="ایجاد آزمون جدید"
+        crumb={['آزمون‌ها', 'ایجاد جدید']}
       />
 
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Stepper Wizard Header */}
-        <div className="card p-4 bg-panel flex items-center justify-between border-line">
-          <div className="flex items-center gap-3">
-            <span
-              className={`size-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                step >= 1 ? 'bg-navy text-panel' : 'bg-paper text-ink-soft'
-              }`}
+      <div className="max-w-[720px]">
+        <div className="card space-y-4">
+          <Field label="عنوان آزمون" required error={errors.title}>
+            <Input
+              value={formData.title}
+              onChange={(e) => handleChange('title', e.target.value)}
+              placeholder="مثلاً: English Language Examination"
+            />
+          </Field>
+
+          <Field label="مضمون مربوطه" required error={errors.subject_id}>
+            <Select
+              value={formData.subject_id || (subjects[0]?.id ? String(subjects[0].id) : '')}
+              onChange={(e) => handleChange('subject_id', e.target.value)}
             >
-              ۱
-            </span>
-            <div className="text-xs">
-              <div className="font-bold text-navy">مرحله اول: مشخصات پایه</div>
-              <div className="text-ink-soft">عنوان، کد و تنظیمات زمانی</div>
-            </div>
+              <option value="">انتخاب مضمون...</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.code})
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label="توضیحات" error={errors.description}>
+            <Textarea
+              rows={2}
+              value={formData.description}
+              onChange={(e) => handleChange('description', e.target.value)}
+              placeholder="توضیحات آزمون..."
+            />
+          </Field>
+
+          <FieldRow cols={3}>
+            <Field label="مدت زمان (دقیقه)" required error={errors.duration_minutes}>
+              <Input
+                type="number"
+                min="1"
+                max="480"
+                value={formData.duration_minutes}
+                onChange={(e) => handleChange('duration_minutes', Number(e.target.value))}
+              />
+            </Field>
+
+            <Field label="نمره کل" required error={errors.total_marks}>
+              <Input
+                type="number"
+                min="1"
+                value={formData.total_marks}
+                onChange={(e) => handleChange('total_marks', Number(e.target.value))}
+              />
+            </Field>
+
+            <Field label="نمره قبولی" required error={errors.pass_marks}>
+              <Input
+                type="number"
+                min="1"
+                value={formData.pass_marks}
+                onChange={(e) => handleChange('pass_marks', Number(e.target.value))}
+              />
+            </Field>
+          </FieldRow>
+
+          <FieldRow cols={2}>
+            <Field label="تاریخ شروع (جهت نمایش در کارت و تقویم)">
+              <Input
+                value={formData.start_date}
+                onChange={(e) => handleChange('start_date', e.target.value)}
+                placeholder="۱۴۰۴/۰۶/۱۲ — ۰۸:۰۰"
+              />
+            </Field>
+
+            <Field label="تاریخ پایان (جهت نمایش در کارت و تقویم)">
+              <Input
+                value={formData.end_date}
+                onChange={(e) => handleChange('end_date', e.target.value)}
+                placeholder="۱۴۰۴/۰۶/۱۲ — ۱۶:۰۰"
+              />
+            </Field>
+          </FieldRow>
+
+          <div className="section-title">بخش‌های آزمون</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-2.5">
+            {formData.sections.map((sec, idx) => (
+              <div
+                key={idx}
+                className="stat p-3 rounded-xl border border-line bg-panel relative overflow-hidden"
+                style={{ '--stat-c': sec.color }}
+              >
+                <div className="text-xs text-ink-soft">{sec.name}</div>
+                <div className="text-base font-bold text-navy mt-1">{sec.count} سوال</div>
+              </div>
+            ))}
           </div>
 
-          <div className="w-12 h-0.5 bg-line hidden sm:block" />
+          <Button type="button" variant="outline" size="sm" onClick={addSection}>
+            + افزودن بخش جدید
+          </Button>
 
-          <div className="flex items-center gap-3">
-            <span
-              className={`size-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                step >= 2 ? 'bg-navy text-panel' : 'bg-paper text-ink-soft'
-              }`}
+          <div className="section-title">تنظیمات پیشرفته</div>
+          <FieldRow cols={3}>
+            <Field label="حرکت به سوال قبلی">
+              <Select
+                value={formData.allow_back_navigation ? 'yes' : 'no'}
+                onChange={(e) => handleChange('allow_back_navigation', e.target.value === 'yes')}
+              >
+                <option value="yes">مجاز</option>
+                <option value="no">غیرمجاز</option>
+              </Select>
+            </Field>
+
+            <Field label="ترتیب تصادفی سوالات">
+              <Select
+                value={formData.randomize_questions ? 'yes' : 'no'}
+                onChange={(e) => handleChange('randomize_questions', e.target.value === 'yes')}
+              >
+                <option value="yes">فعال</option>
+                <option value="no">غیرفعال</option>
+              </Select>
+            </Field>
+
+            <Field label="نمایش نتیجه بعد از اتمام">
+              <Select
+                value={formData.show_result_immediately ? 'yes' : 'no'}
+                onChange={(e) => handleChange('show_result_immediately', e.target.value === 'yes')}
+              >
+                <option value="no">خیر</option>
+                <option value="yes">بلی</option>
+              </Select>
+            </Field>
+          </FieldRow>
+
+          <div className="flex items-center gap-2.5 pt-4 border-t border-line">
+            <Button
+              type="button"
+              variant="outline"
+              loading={submitting}
+              disabled={publishing}
+              onClick={handleSaveDraft}
             >
-              ۲
-            </span>
-            <div className="text-xs">
-              <div className="font-bold text-navy">مرحله دوم: بخش‌های آزمون</div>
-              <div className="text-ink-soft">تعریف سرفصل‌ها و بارم‌بندی</div>
-            </div>
-          </div>
-
-          <div className="w-12 h-0.5 bg-line hidden sm:block" />
-
-          <div className="flex items-center gap-3">
-            <span
-              className={`size-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                step === 3 ? 'bg-teal text-panel' : 'bg-paper text-ink-soft'
-              }`}
+              ذخیره Draft
+            </Button>
+            <Button
+              type="button"
+              variant="teal"
+              loading={publishing}
+              disabled={submitting}
+              onClick={handlePublish}
             >
-              ۳
-            </span>
-            <div className="text-xs">
-              <div className="font-bold text-navy">مرحله سوم: تأیید نهایی</div>
-              <div className="text-ink-soft">بازبینی و ثبت قطعی آزمون</div>
-            </div>
+              انتشار آزمون
+            </Button>
           </div>
         </div>
-
-        {/* Step 1: Details */}
-        {step === 1 && (
-          <div className="card p-6 space-y-4">
-            <h3 className="font-bold text-navy text-sm border-b border-line pb-2">
-              ۱. مشخصات عمومی و زمانی آزمون
-            </h3>
-
-            <FieldRow cols={2}>
-              <Field label="عنوان رسمی آزمون" required error={errors.title}>
-                <Input
-                  value={formData.title}
-                  onChange={(e) => handleChange('title', e.target.value)}
-                  placeholder="مثلاً: امتحان ورودی فاکولته کمپیوتر ساینس — بهار ۱۴۰۵"
-                />
-              </Field>
-
-              <Field label="کد آزمون" required error={errors.code}>
-                <Input
-                  value={formData.code}
-                  onChange={(e) => handleChange('code', e.target.value)}
-                  placeholder="EXAM-2026-CS"
-                />
-              </Field>
-            </FieldRow>
-
-            <FieldRow cols={2}>
-              <Field label="مضمون مربوطه" required error={errors.subject_id}>
-                <Select
-                  value={formData.subject_id}
-                  onChange={(e) => handleChange('subject_id', e.target.value)}
-                >
-                  <option value="">انتخاب مضمون...</option>
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.code})
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-
-              <Field label="مدت زمان برگزاری (دقیقه)" required error={errors.duration_minutes}>
-                <Input
-                  type="number"
-                  min="5"
-                  max="360"
-                  value={formData.duration_minutes}
-                  onChange={(e) => handleChange('duration_minutes', Number(e.target.value))}
-                />
-              </Field>
-            </FieldRow>
-
-            <FieldRow cols={3}>
-              <Field label="نمره کل آزمون" required error={errors.total_score}>
-                <Input
-                  type="number"
-                  value={formData.total_score}
-                  onChange={(e) => handleChange('total_score', Number(e.target.value))}
-                />
-              </Field>
-
-              <Field label="درصد قبولی (Pass %)">
-                <Input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={formData.passing_percentage}
-                  onChange={(e) => handleChange('passing_percentage', Number(e.target.value))}
-                />
-              </Field>
-
-              <Field label="مهلت قطعی شبکه (ثانیه)">
-                <Input
-                  type="number"
-                  value={formData.disconnect_grace_period_seconds}
-                  onChange={(e) => handleChange('disconnect_grace_period_seconds', Number(e.target.value))}
-                />
-              </Field>
-            </FieldRow>
-
-            <div className="flex justify-end gap-2 pt-4 border-t border-line">
-              <Button variant="outline" onClick={() => navigate('/admin/exams')}>
-                انصراف
-              </Button>
-              <Button variant="primary" onClick={handleNext}>
-                گام بعدی: تعریف بخش‌ها →
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Sections */}
-        {step === 2 && (
-          <div className="card p-6 space-y-4">
-            <div className="flex justify-between items-center border-b border-line pb-2">
-              <h3 className="font-bold text-navy text-sm">۲. بخش‌ها و بارم‌بندی آزمون (Sections)</h3>
-              <Button size="sm" variant="outline" onClick={addSection}>
-                + افزودن بخش جدید
-              </Button>
-            </div>
-
-            <div className="space-y-3">
-              {formData.sections.map((sec, idx) => (
-                <div key={idx} className="p-4 border border-line rounded-xl bg-paper/50 flex flex-col sm:flex-row items-center gap-3">
-                  <div className="flex-1 w-full sm:w-auto">
-                    <label className="text-xs text-ink-soft block mb-1">نام سرفصل / بخش</label>
-                    <Input
-                      value={sec.name}
-                      onChange={(e) => handleSectionChange(idx, 'name', e.target.value)}
-                    />
-                  </div>
-                  <div className="w-full sm:w-32">
-                    <label className="text-xs text-ink-soft block mb-1">تعداد سوالات</label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={sec.question_count}
-                      onChange={(e) => handleSectionChange(idx, 'question_count', Number(e.target.value))}
-                    />
-                  </div>
-                  <div className="w-full sm:w-32">
-                    <label className="text-xs text-ink-soft block mb-1">سهم نمره</label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={sec.points}
-                      onChange={(e) => handleSectionChange(idx, 'points', Number(e.target.value))}
-                    />
-                  </div>
-                  {formData.sections.length > 1 && (
-                    <div className="pt-5">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-red"
-                        onClick={() => removeSection(idx)}
-                      >
-                        حذف
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="p-3 bg-panel border border-line rounded-xl flex justify-between text-xs">
-              <span>
-                مجموع سوالات برنامه‌ریزی‌شده: <b>{totalSectionQuestions} سوال</b>
-              </span>
-              <span>
-                مجموع بارم بخش‌ها: <b>{totalSectionPoints} نمره</b> (نمره کل آزمون: {formData.total_score})
-              </span>
-            </div>
-
-            <div className="flex justify-between pt-4 border-t border-line">
-              <Button variant="outline" onClick={() => setStep(1)}>
-                ← بازگشت به مشخصات
-              </Button>
-              <Button variant="primary" onClick={handleNext}>
-                گام بعدی: تأیید نهایی →
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Confirmation */}
-        {step === 3 && (
-          <div className="card p-6 space-y-6">
-            <h3 className="font-bold text-navy text-sm border-b border-line pb-2">
-              ۳. پیش‌نمایش و تأیید نهایی ایجاد آزمون
-            </h3>
-
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div className="p-3 bg-paper rounded-xl space-y-2">
-                <div className="font-bold text-navy">مشخصات آزمون:</div>
-                <div>عنوان: <b>{formData.title}</b></div>
-                <div>کد: <b className="font-mono">{formData.code}</b></div>
-                <div>مضمون: <b>{selectedSubject?.name || 'انتخاب نشده'}</b></div>
-              </div>
-
-              <div className="p-3 bg-paper rounded-xl space-y-2">
-                <div className="font-bold text-navy">تنظیمات زمانی و نمره:</div>
-                <div>مدت آزمون: <b>{formData.duration_minutes} دقیقه</b></div>
-                <div>نمره کل: <b>{formData.total_score} نمره</b></div>
-                <div>شرط قبولی: <b>{formData.passing_percentage}%</b></div>
-              </div>
-            </div>
-
-            <div>
-              <div className="font-bold text-navy text-xs mb-2">بخش‌های تعریف‌شده:</div>
-              <ul className="text-xs space-y-1 bg-paper/60 p-3 rounded-xl border border-line">
-                {formData.sections.map((s, i) => (
-                  <li key={i} className="flex justify-between">
-                    <span>{s.name}</span>
-                    <span className="font-mono">{s.question_count} سوال | {s.points} نمره</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="text-xs text-ink-soft bg-gold-soft/30 p-3 rounded-xl border border-gold/20 leading-relaxed">
-              پس از ایجاد، آزمون در وضعیت «پیش‌نویس (Draft)» قرار می‌گیرد. برای افزودن سوالات، تخصیص صندلی‌ها به متقاضیان و انتشار، از صفحه مدیریت آزمون‌ها اقدام فرمایید.
-            </div>
-
-            <div className="flex justify-between pt-4 border-t border-line">
-              <Button variant="outline" onClick={() => setStep(2)}>
-                ← ویرایش بخش‌ها
-              </Button>
-              <Button
-                variant="teal"
-                size="lg"
-                loading={submitting}
-                onClick={handleSubmit}
-              >
-                تأیید و ثبت نهایی آزمون
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
     </>
   );

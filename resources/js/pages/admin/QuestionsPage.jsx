@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import {
   Badge,
   Button,
-  ConfirmDialog,
   DataTable,
   FilterBar,
   FilterInput,
@@ -18,49 +17,57 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { notifySuccess } from '../../lib/notify.js';
 
 const STATUS_CONFIG = {
-  draft: { label: 'پیش‌نویس (Draft)', tone: 'off' },
-  under_review: { label: 'در حال بازبینی', tone: 'pending' },
-  approved: { label: 'تأییدشده', tone: 'teal' },
-  active: { label: 'فعال در بانک', tone: 'on' },
-  inactive: { label: 'غیرفعال', tone: 'bad' },
-  archived: { label: 'آرشیو', tone: 'off' },
+  active: { label: 'Active', tone: 'on' },
+  approved: { label: 'Approved', tone: 'teal' },
+  under_review: { label: 'Under Review', tone: 'pending' },
+  draft: { label: 'Draft', tone: 'off' },
+  inactive: { label: 'Inactive', tone: 'bad' },
+  archived: { label: 'Archived', tone: 'off' },
 };
 
 const DIFFICULTY_LABELS = {
   easy: 'آسان',
   medium: 'متوسط',
-  hard: 'دشوار',
+  hard: 'سخت',
 };
+
+const SECTION_BADGES = [
+  { key: '', label: 'همه' },
+  { key: 'Grammar', label: 'Grammar' },
+  { key: 'Vocabulary', label: 'Vocabulary' },
+  { key: 'Reading', label: 'Reading' },
+  { key: 'Listening', label: 'Listening' },
+];
 
 export default function QuestionsPage() {
   const { can, hasRole } = useAuth();
   const canManage = can('questions.create') || hasRole('Super Admin', 'Exam Administrator', 'Question Manager');
-  const canApprove = hasRole('Super Admin', 'Exam Administrator', 'Reviewer');
 
   const { items: subjects } = useSubjects();
-  const [filters, setFilters] = useState({ search: '', status: '', difficulty: '', subject_id: '' });
+  const [selectedSection, setSelectedSection] = useState('');
+  const [filters, setFilters] = useState({ search: '', status: '', difficulty: '', topic: '' });
   const [page, setPage] = useState(1);
-  const { items, pagination, loading, reload, create, update, changeStatus, remove, getVersions } = useQuestions({
+
+  const { items, pagination, loading, reload, create, update, getVersions } = useQuestions({
     ...filters,
+    section_name: selectedSection || undefined,
     page,
     per_page: 20,
   });
 
   const [formOpen, setFormOpen] = useState(false);
+  const [formSection, setFormSection] = useState('Grammar');
   const [editingQuestion, setEditingQuestion] = useState(null);
-  const [formType, setFormType] = useState('single_choice');
   const [versionModalQuestion, setVersionModalQuestion] = useState(null);
-  const [deletingQuestion, setDeletingQuestion] = useState(null);
-  const [statusConfirm, setStatusConfirm] = useState(null); // { question, nextStatus, label }
   const [busy, setBusy] = useState(false);
 
   const columns = useMemo(
     () => [
       {
         key: 'question_text',
-        title: 'متن سوال',
+        title: 'سوال',
         render: (_, row) => (
-          <div className="max-w-[420px]">
+          <div className="max-w-[440px]">
             <div className="font-semibold text-ink line-clamp-2">{row.question_text}</div>
             <div className="text-xs text-ink-soft mt-0.5">
               {row.subject?.name ? `${row.subject.name} · ` : ''}
@@ -71,23 +78,27 @@ export default function QuestionsPage() {
       },
       {
         key: 'type',
-        title: 'نوع / بخش',
+        title: 'نوع',
+        render: (_, row) => (
+          <span className="text-xs font-medium text-navy">
+            {row.section_name || (row.question_type === 'single_choice' ? 'Grammar' : row.question_type)}
+          </span>
+        ),
+      },
+      {
+        key: 'options_count',
+        title: 'گزینه‌ها',
         render: (_, row) => {
-          const typeNames = {
-            single_choice: 'چهارگزینه‌ای',
-            multiple_choice: 'چندگزینه‌ای',
-            true_false: 'صحیح/غلط',
-            short_answer: 'پاسخ کوتاه',
-          };
-          return <span className="text-xs font-medium">{typeNames[row.question_type] || row.question_type}</span>;
+          const count = Array.isArray(row.options) ? row.options.length : 4;
+          return <span className="text-xs">{count} گزینه</span>;
         },
       },
       {
-        key: 'difficulty',
-        title: 'دشواری / نمره',
+        key: 'score',
+        title: 'نمره',
         render: (_, row) => (
-          <span className="text-xs">
-            {DIFFICULTY_LABELS[row.difficulty] || row.difficulty} ({row.points ?? 1} نمره)
+          <span className="font-mono text-xs font-bold text-navy">
+            {row.score ?? row.points ?? 2}
           </span>
         ),
       },
@@ -101,39 +112,10 @@ export default function QuestionsPage() {
       },
       {
         key: 'actions',
-        title: 'عملیات',
+        title: '',
         align: 'end',
         render: (_, row) => (
-          <div className="flex items-center justify-end gap-1 flex-wrap">
-            {canApprove && row.status === 'under_review' && (
-              <>
-                <Button
-                  size="sm"
-                  variant="teal"
-                  onClick={() => setStatusConfirm({ question: row, nextStatus: 'approved', label: 'تأیید سوال' })}
-                >
-                  تأیید
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setStatusConfirm({ question: row, nextStatus: 'draft', label: 'رد و بازگشت به پیش‌نویس' })}
-                >
-                  رد
-                </Button>
-              </>
-            )}
-
-            {canManage && row.status === 'draft' && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setStatusConfirm({ question: row, nextStatus: 'under_review', label: 'ارسال برای بررسی' })}
-              >
-                ارسال بررسی
-              </Button>
-            )}
-
+          <div className="flex items-center justify-end gap-1">
             <Button
               size="sm"
               variant="ghost"
@@ -141,36 +123,24 @@ export default function QuestionsPage() {
             >
               نسخه‌ها
             </Button>
-
             {canManage && (
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => {
                   setEditingQuestion(row);
-                  setFormType(row.question_type || 'single_choice');
+                  setFormSection(row.section_name || 'Grammar');
                   setFormOpen(true);
                 }}
               >
                 ویرایش
               </Button>
             )}
-
-            {canManage && (row.status === 'draft' || row.status === 'inactive') && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-red hover:bg-red-soft"
-                onClick={() => setDeletingQuestion(row)}
-              >
-                حذف
-              </Button>
-            )}
           </div>
         ),
       },
     ],
-    [canManage, canApprove]
+    [canManage]
   );
 
   const handleSave = async (formData) => {
@@ -181,33 +151,11 @@ export default function QuestionsPage() {
         notifySuccess('سوال با موفقیت به‌روزرسانی شد.');
       } else {
         await create(formData);
-        notifySuccess('سوال جدید با موفقیت ذخیره شد.');
+        notifySuccess(`سوال ${formData.section_name} با موفقیت در بانک سوالات ثبت شد.`);
       }
       setEditingQuestion(null);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleStatusChange = async () => {
-    if (!statusConfirm) return;
-    setBusy(true);
-    try {
-      await changeStatus(statusConfirm.question.id, statusConfirm.nextStatus);
-      notifySuccess(`وضعیت سوال تغییر یافت.`);
-      setStatusConfirm(null);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deletingQuestion) return;
-    setBusy(true);
-    try {
-      await remove(deletingQuestion.id);
-      notifySuccess('سوال با موفقیت حذف شد.');
-      setDeletingQuestion(null);
+      setFormOpen(false);
+      reload();
     } finally {
       setBusy(false);
     }
@@ -217,7 +165,7 @@ export default function QuestionsPage() {
     <>
       <PageHeader
         title="بانک سوالات"
-        crumb={['سوالات', 'همه سوالات']}
+        crumb={['پوهنتون کندز', 'بانک سوالات']}
         actions={
           canManage && (
             <div className="flex gap-2">
@@ -225,56 +173,85 @@ export default function QuestionsPage() {
                 variant="outline"
                 onClick={() => {
                   setEditingQuestion(null);
-                  setFormType('single_choice');
+                  setFormSection('Grammar');
                   setFormOpen(true);
                 }}
               >
-                + سوال گرامر / واژگان
+                + سوال گرامر
               </Button>
               <Button
                 variant="gold"
                 onClick={() => {
                   setEditingQuestion(null);
-                  setFormType('single_choice');
+                  setFormSection('Vocabulary');
                   setFormOpen(true);
                 }}
               >
-                + سوال لیسنینگ / ریدینگ
+                + سوال واژگان / سایر
               </Button>
             </div>
           )
         }
       />
 
+      {/* Section Quick Filter Badges */}
+      <div className="flex items-center gap-2 mb-3.5 flex-wrap">
+        {SECTION_BADGES.map((b) => {
+          const isSelected = selectedSection === b.key;
+          return (
+            <button
+              key={b.key}
+              type="button"
+              onClick={() => {
+                setSelectedSection(b.key);
+                setPage(1);
+              }}
+              className={`badge cursor-pointer transition-colors ${
+                isSelected ? 'on' : 'off hover:bg-paper'
+              }`}
+            >
+              {b.label}
+            </button>
+          );
+        })}
+      </div>
+
       <FilterBar>
         <FilterInput
           value={filters.search}
-          onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-          placeholder="جستجو در متن سوال یا تاپیک..."
+          onChange={(e) => {
+            setFilters((prev) => ({ ...prev, search: e.target.value }));
+            setPage(1);
+          }}
+          placeholder="جستجو در متن سوال… مثلاً Present Perfect"
         />
         <FilterSelect
-          value={filters.subject_id}
-          onChange={(e) => setFilters((prev) => ({ ...prev, subject_id: e.target.value }))}
-        >
-          <option value="">مضمون: همه</option>
-          {subjects.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </FilterSelect>
-        <FilterSelect
           value={filters.difficulty}
-          onChange={(e) => setFilters((prev) => ({ ...prev, difficulty: e.target.value }))}
+          onChange={(e) => {
+            setFilters((prev) => ({ ...prev, difficulty: e.target.value }));
+            setPage(1);
+          }}
         >
           <option value="">سطح دشواری: همه</option>
           <option value="easy">آسان</option>
           <option value="medium">متوسط</option>
-          <option value="hard">دشوار</option>
+          <option value="hard">سخت</option>
         </FilterSelect>
+        <FilterInput
+          value={filters.topic}
+          onChange={(e) => {
+            setFilters((prev) => ({ ...prev, topic: e.target.value }));
+            setPage(1);
+          }}
+          placeholder="موضوع: مثلاً Tenses"
+          className="max-w-[160px]"
+        />
         <FilterSelect
           value={filters.status}
-          onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+          onChange={(e) => {
+            setFilters((prev) => ({ ...prev, status: e.target.value }));
+            setPage(1);
+          }}
         >
           <option value="">وضعیت: همه</option>
           {Object.entries(STATUS_CONFIG).map(([k, v]) => (
@@ -290,9 +267,9 @@ export default function QuestionsPage() {
           columns={columns}
           data={items}
           loading={loading}
-          emptyTitle="هیچ سوالی با این مشخصات یافت نشد."
+          emptyTitle="هیچ سوالی با این مشخصات در بانک سوالات یافت نشد."
         />
-        {pagination && (
+        {pagination && pagination.lastPage > 1 && (
           <div className="mt-4">
             <Pagination
               currentPage={pagination.currentPage}
@@ -311,7 +288,7 @@ export default function QuestionsPage() {
         }}
         onSave={handleSave}
         question={editingQuestion}
-        initialType={formType}
+        initialSection={formSection}
         busy={busy}
       />
 
@@ -320,27 +297,6 @@ export default function QuestionsPage() {
         onClose={() => setVersionModalQuestion(null)}
         question={versionModalQuestion}
         onGetVersions={getVersions}
-      />
-
-      <ConfirmDialog
-        open={!!statusConfirm}
-        onClose={() => setStatusConfirm(null)}
-        onConfirm={handleStatusChange}
-        title="تغییر وضعیت سوال"
-        message={`آیا از انتقال سوال به وضعیت «${statusConfirm?.label}» اطمینان دارید؟`}
-        confirmLabel="تأیید"
-        busy={busy}
-      />
-
-      <ConfirmDialog
-        open={!!deletingQuestion}
-        onClose={() => setDeletingQuestion(null)}
-        onConfirm={handleDelete}
-        title="حذف سوال"
-        message="آیا از حذف این سوال مطمئن هستید؟ این عملیات غیرقابل برگشت است."
-        confirmTone="danger"
-        confirmLabel="حذف سوال"
-        busy={busy}
       />
     </>
   );
