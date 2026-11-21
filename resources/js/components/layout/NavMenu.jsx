@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cx } from '../../lib/cx.js';
 import useDismiss from '../../hooks/useDismiss.js';
 import { findActiveItem } from '../../config/navigation.js';
@@ -13,11 +13,22 @@ const IDLE = 'text-nav-ink';
 function NavGroup({ entry, activeItemId, open, onToggle, onClose }) {
   const boxRef = useRef(null);
   const buttonRef = useRef(null);
+  const navigate = useNavigate();
+
   useDismiss({ open, onClose, containerRef: boxRef, restoreFocusRef: buttonRef });
   const hasActive = entry.items.some((item) => item.id === activeItemId);
 
+  const handleLinkClick = (e, to) => {
+    e.preventDefault();
+    onClose();
+    navigate(to);
+  };
+
   return (
-    <div ref={boxRef} className="relative nav-group">
+    <div
+      ref={boxRef}
+      className={cx('relative nav-group', open && 'open', hasActive && 'has-active')}
+    >
       <button
         ref={buttonRef}
         type="button"
@@ -25,7 +36,7 @@ function NavGroup({ entry, activeItemId, open, onToggle, onClose }) {
         onClick={onToggle}
         className={cx(
           ITEM_BASE,
-          'grp-btn cursor-pointer',
+          'grp-btn cursor-pointer select-none',
           hasActive ? ACTIVE : IDLE,
           open && 'bg-white/[.09] text-white'
         )}
@@ -42,9 +53,9 @@ function NavGroup({ entry, activeItemId, open, onToggle, onClose }) {
         </span>
       </button>
 
-      {open ? (
+      {open && (
         <div
-          className="grp-items absolute start-0 top-[calc(100%+6px)] z-[60] flex min-w-[240px] flex-col gap-0.5 rounded-xl border border-white/[.12] bg-[#1E3057] p-2 shadow-[0_16px_34px_rgba(0,0,0,.4)] text-right"
+          className="grp-items absolute start-0 top-[calc(100%+6px)] z-[70] flex min-w-[240px] flex-col gap-0.5 rounded-xl border border-white/[.12] bg-[#1E3057] p-2 shadow-[0_16px_34px_rgba(0,0,0,.4)] text-right"
           dir="rtl"
         >
           {entry.items.map((item) => {
@@ -53,12 +64,10 @@ function NavGroup({ entry, activeItemId, open, onToggle, onClose }) {
               <Link
                 key={item.id}
                 to={item.to}
-                onClick={() => {
-                  setTimeout(() => onClose(), 40);
-                }}
+                onClick={(e) => handleLinkClick(e, item.to)}
                 aria-current={isActive ? 'page' : undefined}
                 className={cx(
-                  'flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[12.5px] transition-colors cursor-pointer',
+                  'flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[12.5px] transition-colors cursor-pointer select-none',
                   isActive
                     ? 'bg-[#B08A3E]/20 font-semibold text-white'
                     : 'text-[#AEB8D2] hover:bg-white/[.06] hover:text-white'
@@ -82,19 +91,26 @@ function NavGroup({ entry, activeItemId, open, onToggle, onClose }) {
             );
           })}
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
 
 export default function NavMenu({ entries, label, className }) {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const [openId, setOpenId] = useState(null);
   const active = findActiveItem(entries, pathname);
 
   useEffect(() => {
     setOpenId(null);
   }, [pathname]);
+
+  const handleDirectLinkClick = (e, to) => {
+    e.preventDefault();
+    setOpenId(null);
+    navigate(to);
+  };
 
   return (
     <nav aria-label={label} className={cx('app-nav items-center gap-0.5', className)}>
@@ -116,8 +132,9 @@ export default function NavMenu({ entries, label, className }) {
           <Link
             key={entry.id}
             to={entry.to}
+            onClick={(e) => handleDirectLinkClick(e, entry.to)}
             aria-current={isActive ? 'page' : undefined}
-            className={cx(ITEM_BASE, isActive ? ACTIVE : IDLE, 'cursor-pointer')}
+            className={cx(ITEM_BASE, isActive ? ACTIVE : IDLE, 'cursor-pointer select-none')}
           >
             {entry.icon ? <Icon name={entry.icon} size={16} className="opacity-85 shrink-0" /> : null}
             <span>{entry.label}</span>

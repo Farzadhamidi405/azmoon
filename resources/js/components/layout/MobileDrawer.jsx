@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cx } from '../../lib/cx.js';
 import { Button, Drawer, Icon } from '../ui/index.js';
 import useMediaQuery from '../../hooks/useMediaQuery.js';
@@ -10,9 +10,16 @@ const ROW = 'flex min-h-11 w-full items-center justify-between gap-2 rounded-lg 
 
 export default function MobileDrawer({ open, onClose, entries, user, title, logoutLabel, onLogout, loggingOut = false }) {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const isDesktop = useMediaQuery('(min-width: 64rem)');
   const active = findActiveItem(entries, pathname);
   const [openId, setOpenId] = useState(active.groupId);
+
+  const handleLinkClick = (e, to) => {
+    e.preventDefault();
+    onClose();
+    navigate(to);
+  };
 
   useEffect(() => {
     if (open) setOpenId(active.groupId);
@@ -88,11 +95,11 @@ export default function MobileDrawer({ open, onClose, entries, user, title, logo
                         <li key={item.id}>
                           <Link
                             to={item.to}
-                            onClick={onClose}
+                            onClick={(e) => handleLinkClick(e, item.to)}
                             aria-current={isActive ? 'page' : undefined}
                             className={cx(
                               ROW,
-                              'text-[13px] transition-colors hover:bg-white/[.07] hover:text-white gap-2',
+                              'text-[13px] transition-colors hover:bg-white/[.07] hover:text-white gap-2 cursor-pointer',
                               isActive ? 'bg-[#B08A3E]/20 font-bold text-white' : 'text-nav-ink',
                             )}
                           >
@@ -119,11 +126,11 @@ export default function MobileDrawer({ open, onClose, entries, user, title, logo
             <Link
               key={entry.id}
               to={entry.to}
-              onClick={onClose}
+              onClick={(e) => handleLinkClick(e, entry.to)}
               aria-current={isActive ? 'page' : undefined}
               className={cx(
                 ROW,
-                'transition-colors hover:bg-white/[.07] hover:text-white gap-2',
+                'transition-colors hover:bg-white/[.07] hover:text-white gap-2 cursor-pointer',
                 isActive ? 'bg-[#B08A3E]/20 font-bold text-white' : 'text-nav-ink',
               )}
             >

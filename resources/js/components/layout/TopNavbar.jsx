@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
 import { buildNavigation } from '../../config/navigation.js';
 import { cx } from '../../lib/cx.js';
@@ -10,18 +10,18 @@ import NavMenu from './NavMenu.jsx';
 import NotificationBell from './NotificationBell.jsx';
 
 const TEXT = Object.freeze({
-  menu: '\u0645\u0646\u0648',
-  logout: '\u062E\u0631\u0648\u062C',
+  menu: 'منو',
+  logout: 'خروج',
 });
 
 const DEFAULT_USER = Object.freeze({
-  name: '\u0627\u06CC\u0645\u0644 \u0635\u0627\u0641\u06CC',
+  name: 'ایمل صافی',
   role: 'Exam Administrator',
-  initials: '\u0627\u06CC',
+  initials: 'ای',
 });
 
 const ICON_BUTTON =
-  'inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-[#AEB8D2] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold';
+  'inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-[#AEB8D2] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold cursor-pointer';
 
 export default function TopNavbar() {
   const { user, logout } = useAuth();
@@ -53,13 +53,14 @@ export default function TopNavbar() {
 
   return (
     <header
-      className="sticky top-0 z-50 w-full h-[58px] md:h-16 text-white border-b border-white/10 shadow-sm shrink-0"
+      className="sticky top-0 z-50 w-full h-[58px] md:h-16 text-white border-b border-white/10 shadow-sm shrink-0 overflow-visible"
       style={{
         background: 'linear-gradient(90deg, #152341 0%, #16264A 100%)',
         backgroundColor: '#152341',
       }}
     >
-      <div className="mx-auto flex h-full max-w-[1280px] items-center gap-2 px-3 md:gap-4 md:px-6">
+      <div className="mx-auto flex h-full max-w-[1280px] items-center gap-2 px-3 md:gap-4 md:px-6 overflow-visible">
+        {/* دکمه منوی موبایل (MobileDrawer toggle) — فقط در عرض‌های کمتر از 1024px */}
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
@@ -68,17 +69,24 @@ export default function TopNavbar() {
           aria-expanded={drawerOpen}
           className={cx(ICON_BUTTON, 'lg:hidden')}
         >
-          <Icon name="menu" size={20} />
+          <Icon name="menu" size={22} />
         </button>
 
-        <Brand className="shrink-0" />
+        {/* لوگو و نام پوهنتون با قابلیت کلیک برای بازگشت به داشبورد */}
+        <Link to="/admin/dashboard" className="shrink-0 flex items-center">
+          <Brand className="shrink-0" />
+        </Link>
+
+        {/* خط جداکننده عمودی فقط در دسکتاپ */}
         <span aria-hidden="true" className="hidden h-6 w-px shrink-0 bg-white/15 lg:block" />
 
-        <div className="min-w-0 flex-1 overflow-x-auto scrollbar-none">
-          <NavMenu entries={entries} label={TEXT.menu} className="hidden lg:flex" />
+        {/* منوی ناوبری دسکتاپ — در موبایل (< 1024px) کاملاً پنهان و در دسکتاپ (>= 1024px) فعال */}
+        <div className="hidden lg:flex min-w-0 flex-1 items-center overflow-visible">
+          <NavMenu entries={entries} label={TEXT.menu} className="flex" />
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5 md:gap-3">
+        {/* آیکون‌ها و مشخصات کاربر سمت چپ هدر */}
+        <div className="flex shrink-0 items-center gap-1.5 md:gap-3 ms-auto lg:ms-0">
           <NotificationBell />
 
           <div className="sb-user flex items-center gap-2 rounded-lg py-1 px-1.5 transition-colors hover:bg-white/5">
@@ -99,7 +107,7 @@ export default function TopNavbar() {
             onClick={handleLogout}
             disabled={loggingOut}
             aria-busy={loggingOut}
-            className="hidden min-h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#AEB8D2] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold disabled:cursor-wait disabled:opacity-70 md:inline-flex xl:px-2.5"
+            className="hidden min-h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#AEB8D2] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold disabled:cursor-wait disabled:opacity-70 md:inline-flex xl:px-2.5 cursor-pointer"
           >
             {loggingOut ? <Spinner size="sm" /> : null}
             {TEXT.logout}
@@ -107,6 +115,7 @@ export default function TopNavbar() {
         </div>
       </div>
 
+      {/* دراور مخصوص موبایل */}
       <MobileDrawer
         open={drawerOpen}
         onClose={closeDrawer}
