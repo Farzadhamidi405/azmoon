@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Badge,
   Button,
@@ -231,22 +232,34 @@ export default function CandidatesPage() {
         title="متقاضیان"
         crumb={['پوهنتون کندز', 'متقاضیان']}
         actions={
-          canManage && (
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setBulkOpen(true)}>
-                + تولید گروهی
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link to="/admin/candidates/import">
+              <Button variant="outline">
+                ورود از اکسل
               </Button>
-              <Button
-                variant="gold"
-                onClick={() => {
-                  setEditingCandidate(null);
-                  setFormOpen(true);
-                }}
-              >
-                + افزودن متقاضی
+            </Link>
+            <Link to="/admin/cards">
+              <Button variant="outline">
+                کارت‌های ورود
               </Button>
-            </div>
-          )
+            </Link>
+            {canManage && (
+              <>
+                <Button variant="outline" onClick={() => setBulkOpen(true)}>
+                  + تولید گروهی
+                </Button>
+                <Button
+                  variant="gold"
+                  onClick={() => {
+                    setEditingCandidate(null);
+                    setFormOpen(true);
+                  }}
+                >
+                  + افزودن متقاضی
+                </Button>
+              </>
+            )}
+          </div>
         }
       />
 

@@ -159,9 +159,14 @@ export default function ExamsPage() {
         title="آزمون‌ها"
         crumb={['پوهنتون کندز', 'آزمون‌ها']}
         actions={
-          <Button variant="gold" onClick={() => navigate('/admin/exams/create')}>
-            + ایجاد آزمون جدید
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" onClick={() => navigate('/admin/questions')}>
+              بانک سوالات
+            </Button>
+            <Button variant="gold" onClick={() => navigate('/admin/exams/create')}>
+              + ایجاد آزمون جدید
+            </Button>
+          </div>
         }
       />
 

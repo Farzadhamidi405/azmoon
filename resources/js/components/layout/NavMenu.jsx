@@ -53,10 +53,12 @@ function NavGroup({ entry, activeItemId, open, onToggle, onClose }) {
               <Link
                 key={item.id}
                 to={item.to}
-                onClick={onClose}
+                onClick={() => {
+                  setTimeout(() => onClose(), 40);
+                }}
                 aria-current={isActive ? 'page' : undefined}
                 className={cx(
-                  'flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[12.5px] transition-colors',
+                  'flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[12.5px] transition-colors cursor-pointer',
                   isActive
                     ? 'bg-[#B08A3E]/20 font-semibold text-white'
                     : 'text-[#AEB8D2] hover:bg-white/[.06] hover:text-white'
@@ -115,7 +117,7 @@ export default function NavMenu({ entries, label, className }) {
             key={entry.id}
             to={entry.to}
             aria-current={isActive ? 'page' : undefined}
-            className={cx(ITEM_BASE, isActive ? ACTIVE : IDLE)}
+            className={cx(ITEM_BASE, isActive ? ACTIVE : IDLE, 'cursor-pointer')}
           >
             {entry.icon ? <Icon name={entry.icon} size={16} className="opacity-85 shrink-0" /> : null}
             <span>{entry.label}</span>

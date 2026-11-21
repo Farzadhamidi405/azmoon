@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Badge,
   Button,
@@ -169,9 +170,21 @@ export default function SessionsPage() {
         title="جلسات فعال و مانیتورینگ زنده"
         crumb={['نظارت', 'مانیتورینگ زنده']}
         actions={
-          <Button variant="outline" onClick={reload}>
-            ⟳ رفرش زنده
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link to="/admin/lab-monitor">
+              <Button variant="outline" size="sm">
+                نمای مانیتور لابراتوار
+              </Button>
+            </Link>
+            <Link to="/admin/incidents">
+              <Button variant="outline" size="sm">
+                گزارش حوادث
+              </Button>
+            </Link>
+            <Button variant="gold" size="sm" onClick={reload}>
+              ⟳ رفرش زنده
+            </Button>
+          </div>
         }
       />
 

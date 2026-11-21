@@ -16,6 +16,8 @@ export const NAV_CONFIG = [
       { id: 'exams-list', label: '\u0644\u06CC\u0633\u062A \u0622\u0632\u0645\u0648\u0646\u200C\u0647\u0627', to: '/admin/exams', icon: 'doc', pill: '\u06F3' },
       { id: 'exam-create', label: '\u0627\u06CC\u062C\u0627\u062F / \u0648\u06CC\u0631\u0627\u06CC\u0634 \u0622\u0632\u0645\u0648\u0646', to: '/admin/exams/create', icon: 'plus' },
       { id: 'pool', label: 'Question Pool', to: '/admin/exams/pool', icon: 'layers' },
+      { id: 'subjects', label: '\u0645\u0636\u0627\u0645\u06CC\u0646', to: '/admin/subjects', icon: 'book' },
+      { id: 'faculties', label: '\u062F\u0627\u0646\u0634\u06A9\u062F\u0647\u200C\u0647\u0627', to: '/admin/faculties', icon: 'doc' },
     ],
   },
   {
@@ -41,7 +43,8 @@ export const NAV_CONFIG = [
     label: '\u062C\u0644\u0633\u0627\u062A \u0648 \u0644\u0627\u0628\u0631\u0627\u062A\u0648\u0627\u0631', // جلسات و لابراتوار
     items: [
       { id: 'sessions', label: '\u062C\u0644\u0633\u0627\u062A \u0627\u0645\u062A\u062D\u0627\u0646', to: '/admin/sessions', icon: 'clock', pill: '\u06F1\u06F8' },
-      { id: 'labs', label: '\u0644\u0627\u0628\u0631\u0627\u062A\u0648\u0627\u0631\u0647\u0627 \u0648 \u06A9\u0627\u0645\u067E\u06CC\u0648\u062A\u0631\u0647\u0627', to: '/admin/labs', icon: 'lab' },
+      { id: 'labs', label: '\u0644\u0627\u0628\u0631\u0627\u062A\u0648\u0627\u0631\u0647\u0627', to: '/admin/labs', icon: 'lab' },
+      { id: 'computers', label: '\u06A9\u0627\u0645\u067E\u06CC\u0648\u062A\u0631\u0647\u0627', to: '/admin/computers', icon: 'lab' },
       { id: 'shifts', label: '\u0634\u0641\u062A\u200C\u0647\u0627', to: '/admin/shifts', icon: 'clock' },
       { id: 'incidents', label: '\u062D\u0648\u0627\u062F\u062B \u0627\u0645\u062A\u062D\u0627\u0646', to: '/admin/incidents', icon: 'alert' },
       { id: 'override', label: 'Manual Override', to: '/admin/override', icon: 'shield' },
@@ -104,12 +107,13 @@ export function isPathActive(pathname, to) {
 }
 
 export function findActiveItem(entries, pathname) {
+  if (!Array.isArray(entries)) return { groupId: null, itemId: null };
   for (const entry of entries) {
     if (entry.type === 'link') {
       if (isPathActive(pathname, entry.to)) {
         return { groupId: null, itemId: entry.id };
       }
-    } else if (entry.type === 'group') {
+    } else if (entry.type === 'group' && Array.isArray(entry.items)) {
       for (const item of entry.items) {
         if (isPathActive(pathname, item.to)) {
           return { groupId: entry.id, itemId: item.id };
