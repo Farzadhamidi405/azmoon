@@ -87,7 +87,10 @@ body{margin:0;font-family:var(--font);background:#0F1522;color:var(--ink);}
 .nav-group{position:relative;}
 .grp{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#5E6A8A;margin:14px 8px 7px;font-weight:600;}
 .grp:first-child{margin-top:0;}
-.grp-btn{display:none;}
+.app-sidebar .grp-btn{display:none;}
+.grp-btn{display:inline-flex;}
+header .sb-brand{border-bottom:none !important;margin-bottom:0 !important;padding:0 !important;}
+header .grp-btn{display:inline-flex !important;}
 .grp-items{display:block;}
 .app-nav a{display:flex;align-items:center;gap:10px;padding:8.5px 10px;border-radius:9px;color:#AEB8D2;text-decoration:none;font-size:12.5px;margin-bottom:2px;position:relative;transition:background .12s;cursor:default;}
 .app-nav a svg{flex:0 0 16px;opacity:.85;}

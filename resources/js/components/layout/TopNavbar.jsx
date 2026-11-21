@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../../hooks/useAuth.js';
 import { buildNavigation } from '../../config/navigation.js';
 import { cx } from '../../lib/cx.js';
 import { Icon, Spinner } from '../ui/index.js';
@@ -52,7 +52,13 @@ export default function TopNavbar() {
   }
 
   return (
-    <header className="sticky top-0 z-40 h-[58px] bg-gradient-to-r from-navy to-[#16264A] text-white border-b border-white/[.08]">
+    <header
+      className="sticky top-0 z-50 w-full h-[58px] md:h-16 text-white border-b border-white/10 shadow-sm shrink-0"
+      style={{
+        background: 'linear-gradient(90deg, #152341 0%, #16264A 100%)',
+        backgroundColor: '#152341',
+      }}
+    >
       <div className="mx-auto flex h-full max-w-[1280px] items-center gap-2 px-3 md:gap-4 md:px-6">
         <button
           type="button"

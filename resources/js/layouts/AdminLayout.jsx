@@ -20,7 +20,7 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-screen bg-paper flex flex-col">
       <a
         href="#main-content"
         onClick={skipToContent}
@@ -33,7 +33,7 @@ export default function AdminLayout() {
         id="main-content"
         ref={mainRef}
         tabIndex={-1}
-        className="mx-auto w-full max-w-[1280px] px-3 py-4 outline-none md:px-6 md:py-8"
+        className="mx-auto w-full max-w-[1280px] flex-1 px-3 py-6 outline-none md:px-6 md:py-8"
       >
         <Outlet />
       </main>
