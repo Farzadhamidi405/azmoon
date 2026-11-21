@@ -7,6 +7,8 @@ use App\Http\Controllers\Controller;
 use App\Services\AuditLogService;
 use Illuminate\Support\Facades\DB;
 use App\Models\Exam;
+use App\Models\ExamSection;
+use App\Services\ExamSnapshotService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -77,20 +79,53 @@ class ExamController extends Controller
             'allow_back_navigation'   => ['boolean'],
             'show_result_immediately' => ['boolean'],
             'default_calendar'        => ['nullable', Rule::in(['shamsi', 'qamari', 'miladi'])],
+            'sections'                => ['nullable', 'array', 'min:1'],
+            'sections.*.name'          => ['required', 'string', 'max:100'],
+            'sections.*.question_count'=> ['required', 'integer', 'min:1'],
+            'sections.*.total_marks'   => ['required', 'numeric', 'min:0.5'],
+            'sections.*.display_order' => ['nullable', 'integer'],
         ]);
+
+        $sections = $validated['sections'] ?? [];
+        unset($validated['sections']);
+
+        // اعتبارسنجی همخوانی مجموع نمرات بخش‌ها با نمره کل
+        if (!empty($sections)) {
+            $sectionsSum = (float) array_sum(array_column($sections, 'total_marks'));
+            if (abs($sectionsSum - (float) $validated['total_marks']) > 1.0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'مجموع نمرات بخش‌های آزمون با نمره کل آزمون برابر نیست.',
+                    'errors'  => [
+                        'sections' => ['مجموع نمرات بخش‌ها (' . $sectionsSum . ') باید با نمره کل (' . $validated['total_marks'] . ') برابر باشد.'],
+                    ],
+                ], 422);
+            }
+        }
 
         $validated['status']     = 'draft';
         $validated['created_by'] = Auth::id();
 
-        // ایجاد Exam و ثبت audit در یک تراکنش؛ شکست audit کل ایجاد را برمی‌گرداند.
-        $exam = DB::transaction(function () use ($validated, $audit) {
+        // ایجاد Exam و ذخیره بخش‌ها در یک تراکنش اتمیک
+        $exam = DB::transaction(function () use ($validated, $sections, $audit) {
             $newRecord = Exam::create($validated);
+
+            if (!empty($sections)) {
+                foreach ($sections as $index => $sec) {
+                    $newRecord->sections()->create([
+                        'name'           => $sec['name'],
+                        'question_count' => (int) $sec['question_count'],
+                        'total_marks'    => (float) $sec['total_marks'],
+                        'display_order'  => (int) ($sec['display_order'] ?? ($index + 1)),
+                    ]);
+                }
+            }
 
             $audit->created('exams', 'Exam:created', $newRecord);
 
             return $newRecord;
         });
-        $exam->load(['subject', 'creator']);
+        $exam->load(['subject', 'creator', 'sections']);
 
         return response()->json([
             'success' => true,
@@ -117,13 +152,48 @@ class ExamController extends Controller
             'allow_back_navigation'   => ['boolean'],
             'show_result_immediately' => ['boolean'],
             'default_calendar'        => ['nullable', Rule::in(['shamsi', 'qamari', 'miladi'])],
+            'sections'                => ['nullable', 'array', 'min:1'],
+            'sections.*.name'          => ['required', 'string', 'max:100'],
+            'sections.*.question_count'=> ['required', 'integer', 'min:1'],
+            'sections.*.total_marks'   => ['required', 'numeric', 'min:0.5'],
+            'sections.*.display_order' => ['nullable', 'integer'],
         ]);
 
-        // snapshot قبل از ویرایش + ثبت audit در همان تراکنش؛ شکست audit کل ویرایش را برمی‌گرداند.
-        DB::transaction(function () use ($exam, $validated, $audit) {
+        $sections = null;
+        if (array_key_exists('sections', $validated)) {
+            $sections = $validated['sections'];
+            unset($validated['sections']);
+
+            $totalTargetMarks = (float) ($validated['total_marks'] ?? $exam->total_marks);
+            $sectionsSum = (float) array_sum(array_column($sections, 'total_marks'));
+            if (abs($sectionsSum - $totalTargetMarks) > 1.0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'مجموع نمرات بخش‌های آزمون با نمره کل آزمون برابر نیست.',
+                    'errors'  => [
+                        'sections' => ['مجموع نمرات بخش‌ها (' . $sectionsSum . ') باید با نمره کل (' . $totalTargetMarks . ') برابر باشد.'],
+                    ],
+                ], 422);
+            }
+        }
+
+        // snapshot قبل از ویرایش + ثبت audit در همان تراکنش
+        DB::transaction(function () use ($exam, $validated, $sections, $audit) {
             $before = $audit->snapshot($exam);
 
             $exam->update($validated);
+
+            if ($sections !== null) {
+                $exam->sections()->delete();
+                foreach ($sections as $index => $sec) {
+                    $exam->sections()->create([
+                        'name'           => $sec['name'],
+                        'question_count' => (int) $sec['question_count'],
+                        'total_marks'    => (float) $sec['total_marks'],
+                        'display_order'  => (int) ($sec['display_order'] ?? ($index + 1)),
+                    ]);
+                }
+            }
 
             $audit->updated('exams', 'Exam:updated', $exam, $before);
         });
@@ -131,7 +201,7 @@ class ExamController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'آزمون با موفقیت ویرایش شد.',
-            'data'    => $exam->fresh(['subject', 'creator']),
+            'data'    => $exam->fresh(['subject', 'creator', 'sections']),
         ]);
     }
 
@@ -172,6 +242,14 @@ class ExamController extends Controller
         if ($newStatus === 'published') {
             $updateData['published_at'] = now();
             $updateData['approved_by']  = Auth::id();
+
+            // ساخت و انجماد اسنپ‌شات آزمون جهت جلوگیری از خطای ۵۰۰ در زمان ورود متقاضی
+            try {
+                $snapshotService = app(ExamSnapshotService::class);
+                $snapshotService->findOrCreateSnapshot($exam);
+            } catch (Throwable $snapErr) {
+                report($snapErr);
+            }
         }
 
         // وضعیت قبلی، تغییر وضعیت و ثبت audit در یک تراکنش.

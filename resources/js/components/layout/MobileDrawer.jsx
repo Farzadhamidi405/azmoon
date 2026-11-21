@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cx } from '../../lib/cx.js';
-import { Button, Drawer } from '../ui/index.js';
+import { Button, Drawer, Icon } from '../ui/index.js';
 import useMediaQuery from '../../hooks/useMediaQuery.js';
 import { findActiveItem } from '../../config/navigation.js';
-import { roleName } from '../../lib/permissions.js';
 
-// Mobile menu (below lg): Drawer on the start side (right in RTL). Touch targets are at least 44px.
 const FALLBACK_LETTER = '\u06A9';
 const ROW = 'flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 text-sm';
 
@@ -18,21 +16,19 @@ export default function MobileDrawer({ open, onClose, entries, user, title, logo
 
   useEffect(() => {
     if (open) setOpenId(active.groupId);
-  }, [open]);
+  }, [open, active.groupId]);
 
-  // Reaching the desktop width closes the drawer, because the desktop menu takes over.
   useEffect(() => {
     if (open && isDesktop) onClose();
   }, [open, isDesktop, onClose]);
 
-  // Browser back/forward while open.
   useEffect(() => {
     if (open) onClose();
   }, [pathname]);
 
-  const name = user && typeof user.name === 'string' ? user.name.trim() : '';
+  const name = (user && typeof user.name === 'string' && user.name.trim()) || '\u0627\u06CC\u0645\u0644 \u0635\u0627\u0641\u06CC';
   const letter = name.charAt(0) || FALLBACK_LETTER;
-  const role = roleName(user);
+  const role = (user && typeof user.role === 'string') ? user.role : 'Exam Administrator';
 
   return (
     <Drawer
@@ -56,7 +52,7 @@ export default function MobileDrawer({ open, onClose, entries, user, title, logo
         </span>
         <span className="min-w-0">
           <span className="block truncate text-sm font-bold text-white">{name}</span>
-          {role ? <span className="block truncate text-xs text-nav-ink">{role}</span> : null}
+          {role ? <span className="block truncate text-xs text-[#8B96B3]">{role}</span> : null}
         </span>
       </div>
       <nav aria-label={title}>
@@ -96,11 +92,19 @@ export default function MobileDrawer({ open, onClose, entries, user, title, logo
                             aria-current={isActive ? 'page' : undefined}
                             className={cx(
                               ROW,
-                              'text-[13px] transition-colors hover:bg-white/[.07] hover:text-white',
-                              isActive ? 'bg-white/15 font-bold text-white' : 'text-nav-ink',
+                              'text-[13px] transition-colors hover:bg-white/[.07] hover:text-white gap-2',
+                              isActive ? 'bg-[#B08A3E]/20 font-bold text-white' : 'text-nav-ink',
                             )}
                           >
-                            {item.label}
+                            <span className="flex items-center gap-2 truncate">
+                              {item.icon ? <Icon name={item.icon} size={15} className="opacity-80 shrink-0" /> : null}
+                              <span>{item.label}</span>
+                            </span>
+                            {item.pill ? (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white/10 text-[#DCE2EE]">
+                                {item.pill}
+                              </span>
+                            ) : null}
                           </Link>
                         </li>
                       );
@@ -119,11 +123,19 @@ export default function MobileDrawer({ open, onClose, entries, user, title, logo
               aria-current={isActive ? 'page' : undefined}
               className={cx(
                 ROW,
-                'transition-colors hover:bg-white/[.07] hover:text-white',
-                isActive ? 'bg-white/15 font-bold text-white' : 'text-nav-ink',
+                'transition-colors hover:bg-white/[.07] hover:text-white gap-2',
+                isActive ? 'bg-[#B08A3E]/20 font-bold text-white' : 'text-nav-ink',
               )}
             >
-              {entry.label}
+              <span className="flex items-center gap-2 truncate">
+                {entry.icon ? <Icon name={entry.icon} size={15} className="opacity-80 shrink-0" /> : null}
+                <span>{entry.label}</span>
+              </span>
+              {entry.pill ? (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white/10 text-[#DCE2EE]">
+                  {entry.pill}
+                </span>
+              ) : null}
             </Link>
           );
         })}

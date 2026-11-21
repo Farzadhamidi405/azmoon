@@ -33,6 +33,7 @@ class QuestionController extends Controller
             ->when($request->status,       fn($q) => $q->where('status', $request->status))
             ->when($request->difficulty,   fn($q) => $q->where('difficulty', $request->difficulty))
             ->when($request->question_type,fn($q) => $q->where('question_type', $request->question_type))
+            ->when($request->topic,        fn($q) => $q->where('topic', 'like', '%'.$request->topic.'%'))
             ->when($request->created_by,   fn($q) => $q->where('created_by', $request->created_by))
             ->when($request->search,       fn($q) => $q->where('question_text', 'like', '%'.$request->search.'%'))
             ->orderByDesc('created_at');
@@ -331,6 +332,13 @@ class QuestionController extends Controller
     public function destroy(Question $question, AuditLogService $audit)
     {
         Gate::authorize('delete', $question);
+
+        if ($question->status !== 'draft') {
+            return response()->json([
+                'success' => false,
+                'message' => 'تنها سوالات با وضعیت پیش‌نویس (draft) قابل حذف هستند.',
+            ], 422);
+        }
 
         // متادیتای سوال قبل از حذف نرم + audit در همان تراکنش.
         DB::transaction(function () use ($question, $audit) {

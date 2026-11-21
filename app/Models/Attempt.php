@@ -182,12 +182,11 @@ class Attempt extends Model
     
     /**
      * حوادث مرتبط با این Attempt.
-     * TODO: فعال می‌شود بعد از ساخت Incident Model
      */
-    // public function incidents(): HasMany
-    // {
-    //     return $this->hasMany(Incident::class, 'attempt_id');
-    // }
+    public function incidents(): HasMany
+    {
+        return $this->hasMany(Incident::class, 'attempt_id');
+    }
 
     // ─── Helper Methods ──────────────────────────────────────
 

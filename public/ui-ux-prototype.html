@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سیستم امتحان زبان پوهنتون کندز — نمونهٔ یکپارچهٔ UI/UX (v3)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#152341; --navy-2:#1E3057; --navy-3:#28406F;
+  --paper:#F5F3ED; --panel:#FFFFFF; --ink:#1B1B18; --ink-soft:#68665F; --line:#E5E1D4;
+  --teal:#2E7A5F; --teal-soft:#E4F0EA; --gold:#B08A3E; --gold-soft:#F5EEDC;
+  --amber:#B5791A; --amber-soft:#FBF0DD; --red:#A23B2E; --red-soft:#F7E7E3;
+  --radius:10px; --radius-lg:14px; --shadow:0 1px 2px rgba(21,35,65,.04),0 6px 20px rgba(21,35,65,.06);
+  --font:'Vazirmatn',Tahoma,sans-serif;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--font);background:#0F1522;color:var(--ink);}
+
+.proto-shell{display:flex;min-height:100vh;}
+.proto-nav{width:250px;flex:0 0 250px;background:#0B0F1A;color:#C9CFDD;padding:20px 14px;overflow-y:auto;direction:ltr;text-align:left;border-left:1px solid #1B2337;}
+.proto-nav h1{font-family:var(--font);font-size:14px;color:#fff;margin:0 0 2px;line-height:1.4;}
+.proto-nav .sub{font-size:11px;color:#6A7495;margin-bottom:16px;}
+.proto-group{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#4E5A7A;margin:16px 0 8px;padding:0 6px;}
+.proto-btn{display:block;width:100%;text-align:left;background:transparent;border:none;color:#AEB7D0;padding:8px 10px;border-radius:6px;font-size:12.5px;font-family:var(--font);cursor:pointer;margin-bottom:2px;}
+.proto-btn:hover{background:#161E30;color:#fff;}
+.proto-btn.active{background:#243357;color:#fff;font-weight:600;}
+.proto-num{display:inline-block;width:18px;color:#4E5A7A;}
+.proto-stage{flex:1;background:var(--paper);overflow:auto;}
+.screen{display:none;min-height:100vh;}
+.screen.active{display:block;}
+
+.proto-controls{display:flex;flex-direction:column;gap:6px;margin-bottom:6px;}
+.proto-toggle{display:flex;align-items:center;justify-content:space-between;background:#131A2C;border:1px solid #232C40;border-radius:7px;padding:8px 10px;font-size:11.5px;color:#C9CFDD;cursor:pointer;}
+.proto-toggle:hover{border-color:#3A4A70;}
+.proto-toggle .sw{width:32px;height:18px;border-radius:20px;background:#2A3550;position:relative;flex:0 0 32px;}
+.proto-toggle .sw i{position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;background:#8B96B3;transition:.15s;}
+.proto-toggle.active .sw{background:var(--gold);}
+.proto-toggle.active .sw i{right:16px;background:#1B1608;}
+.proto-note{font-size:11px;color:#5A6584;background:#12182A;border:1px solid #232C40;border-radius:7px;padding:9px 10px;margin-bottom:16px;line-height:1.7;}
+
+/* ================= APP SHELL / SIDEBAR ================= */
+.app-shell{display:flex;min-height:100vh;background:var(--paper);}
+.app-sidebar{width:252px;flex:0 0 252px;background:linear-gradient(180deg,var(--navy) 0%,#0F1B34 100%);color:#DCE2EE;padding:20px 14px;display:flex;flex-direction:column;}
+.sb-brand{display:flex;align-items:center;gap:10px;padding:6px 8px 20px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:16px;}
+.sb-crest{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--gold),#8A6D2F);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1B1608;font-size:15px;flex:0 0 36px;}
+.sb-brand-txt .t1{font-size:13.5px;font-weight:700;color:#fff;line-height:1.3;}
+.sb-brand-txt .t2{font-size:10.5px;color:#8B96B3;}
+.sb-search{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:8px;padding:8px 10px;margin-bottom:16px;}
+.sb-search svg{flex:0 0 15px;opacity:.6;}
+.sb-search input{background:transparent;border:none;color:#DCE2EE;font-family:var(--font);font-size:12px;width:100%;outline:none;}
+.sb-search input::placeholder{color:#7C87A3;}
+.app-nav{flex:1;overflow-y:auto;}
+.nav-group{position:relative;}
+.grp{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#5E6A8A;margin:14px 8px 7px;font-weight:600;}
+.grp:first-child{margin-top:0;}
+.grp-btn{display:none;}
+.grp-items{display:block;}
+.app-nav a{display:flex;align-items:center;gap:10px;padding:8.5px 10px;border-radius:9px;color:#AEB8D2;text-decoration:none;font-size:12.5px;margin-bottom:2px;position:relative;transition:background .12s;cursor:default;}
+.app-nav a svg{flex:0 0 16px;opacity:.85;}
+.app-nav a:hover{background:rgba(255,255,255,.05);color:#fff;}
+.app-nav a.on{background:rgba(176,138,62,.16);color:#fff;font-weight:600;}
+.app-nav a.on::before{content:"";position:absolute;right:-14px;top:50%;transform:translateY(-50%);width:3px;height:18px;background:var(--gold);border-radius:3px;}
+.app-nav a .pill{margin-inline-start:auto;background:rgba(255,255,255,.1);color:#DCE2EE;font-size:10px;padding:1px 7px;border-radius:20px;font-weight:700;}
+.app-nav a.on .pill{background:var(--gold);color:#1B1608;}
+.sb-foot{border-top:1px solid rgba(255,255,255,.08);padding-top:12px;margin-top:10px;}
+.sb-user{display:flex;align-items:center;gap:9px;padding:8px;border-radius:9px;}
+.sb-user:hover{background:rgba(255,255,255,.05);}
+.sb-user .av{width:32px;height:32px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:0 0 32px;}
+.sb-user .nm{font-size:12.5px;font-weight:600;color:#fff;line-height:1.3;}
+.sb-user .rl{font-size:10.5px;color:#8B96B3;}
+.sb-user svg{margin-inline-start:auto;opacity:.6;}
+
+.app-main{flex:1;padding:24px 30px;max-width:1180px;}
+.app-topbar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;flex-wrap:wrap;gap:12px;}
+.crumb{font-size:11.5px;color:var(--ink-soft);margin-bottom:4px;}
+.crumb b{color:var(--navy);font-weight:600;}
+.app-topbar h2{font-size:20px;margin:0;font-weight:800;color:var(--navy);}
+.user-chip{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);padding:6px 12px 6px 6px;border-radius:22px;font-size:12.5px;box-shadow:var(--shadow);}
+.avatar{width:26px;height:26px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:20px;box-shadow:var(--shadow);}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:16px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.stat::before{content:"";position:absolute;top:0;right:0;width:4px;height:100%;background:var(--stat-c,var(--gold));}
+.stat .num{font-size:26px;font-weight:800;color:var(--navy);}
+.stat .lbl{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);font-weight:700;padding:11px 12px;border-bottom:1.5px solid var(--line);}
+td{padding:12px;border-bottom:1px solid #EFECE2;}
+tr:hover td{background:#FBFAF6;}
+tr:last-child td{border-bottom:none;}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:4px 10px;border-radius:20px;font-weight:600;}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;}
+.badge.on{background:var(--teal-soft);color:var(--teal);}
+.badge.pending{background:var(--amber-soft);color:var(--amber);}
+.badge.off{background:#EDEBE4;color:var(--ink-soft);}
+.badge.bad{background:var(--red-soft);color:var(--red);}
+
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;border:1px solid transparent;cursor:pointer;font-family:var(--font);}
+.btn-primary{background:var(--navy);color:#fff;}
+.btn-primary:hover{background:var(--navy-3);}
+.btn-gold{background:var(--gold);color:#241D0B;}
+.btn-outline{background:#fff;border-color:var(--line);color:var(--ink);}
+.btn-teal{background:var(--teal);color:#fff;}
+.btn-danger{background:var(--red);color:#fff;}
+.btn-ghost{background:transparent;color:var(--navy);border:none;font-weight:600;padding:4px 8px;}
+
+label{display:block;font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;font-weight:600;}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-family:var(--font);font-size:13.5px;background:#fff;color:var(--ink);}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--navy-3);outline-offset:1px;}
+.field{margin-bottom:16px;}
+.row{display:flex;gap:14px;flex-wrap:wrap;}
+.row>*{flex:1;min-width:140px;}
+.section-title{font-size:12.5px;font-weight:700;color:var(--navy);margin:22px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.03em;}
+.helper{font-size:11.5px;color:var(--ink-soft);margin-top:5px;}
+
+.cand-shell{min-height:100vh;background:#EFEDE4;display:flex;flex-direction:column;}
+.cand-top{background:var(--navy);color:#fff;padding:14px 26px;display:flex;justify-content:space-between;align-items:center;font-size:13px;}
+.cand-top .title{font-weight:700;}
+.cand-center{flex:1;display:flex;align-items:center;justify-content:center;padding:30px;}
+.cand-card{background:#fff;border-radius:var(--radius-lg);max-width:560px;width:100%;padding:36px 34px;border:1px solid var(--line);box-shadow:var(--shadow);}
+.timer-pill{background:var(--navy-2);color:#fff;padding:8px 18px;border-radius:20px;font-weight:800;font-size:15px;letter-spacing:.02em;font-variant-numeric:tabular-nums;}
+.timer-pill.warn{background:var(--amber);}
+.qnav{display:grid;grid-template-columns:repeat(10,1fr);gap:6px;}
+.qnav div{width:100%;aspect-ratio:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;border:1px solid var(--line);color:var(--ink-soft);background:#fff;}
+.qnav .done{background:var(--teal-soft);color:var(--teal);border-color:var(--teal);}
+.qnav .cur{background:var(--navy);color:#fff;border-color:var(--navy);}
+.opt{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:9px;padding:13px 14px;margin-bottom:10px;cursor:pointer;}
+.opt.sel{border-color:var(--navy);background:#F1F3F8;}
+.opt .dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--line);flex:0 0 18px;}
+.opt.sel .dot{border-color:var(--navy);background:var(--navy);box-shadow:inset 0 0 0 3px #fff;}
+.player{background:var(--navy);border-radius:9px;padding:18px;color:#fff;display:flex;align-items:center;gap:14px;}
+.player .btnc{width:36px;height:36px;border-radius:50%;background:#fff;color:var(--navy);display:flex;align-items:center;justify-content:center;font-weight:800;}
+.player .track{flex:1;height:4px;background:#3A4A6E;border-radius:3px;position:relative;}
+.player .track i{position:absolute;inset:0;width:38%;background:var(--teal);border-radius:3px;}
+.check{width:64px;height:64px;border-radius:50%;background:var(--teal-soft);color:var(--teal);display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 18px;}
+
+.perm-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.perm-table th{text-align:center;font-size:11px;padding:9px 6px;border-bottom:1.5px solid var(--line);color:var(--ink-soft);}
+.perm-table th:first-child{text-align:right;}
+.perm-table td{text-align:center;padding:9px 6px;border-bottom:1px solid #EFECE2;}
+.perm-table td:first-child{text-align:right;font-weight:600;}
+.chk{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--line);display:inline-flex;align-items:center;justify-content:center;background:#fff;}
+.chk.on{background:var(--navy);border-color:var(--navy);color:#fff;font-size:12px;}
+.tabs{display:flex;gap:4px;border-bottom:1.5px solid var(--line);margin-bottom:18px;flex-wrap:wrap;}
+.tab{padding:9px 16px;font-size:12.5px;font-weight:600;color:var(--ink-soft);border-bottom:2px solid transparent;margin-bottom:-1.5px;cursor:pointer;}
+.tab.on{color:var(--navy);border-color:var(--gold);}
+.lab-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+.lab-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:16px;box-shadow:var(--shadow);}
+.lab-card .lab-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.lab-card .lab-head b{font-size:13.5px;}
+.pc-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;}
+.pc-tile{aspect-ratio:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;}
+.pc-tile.online{background:#3C9C74;} .pc-tile.exam{background:var(--gold);color:#241D0B;}
+.pc-tile.offline{background:#C4574A;} .pc-tile.maint{background:#8B8F98;}
+.legend{display:flex;gap:14px;font-size:11px;color:var(--ink-soft);margin-top:12px;flex-wrap:wrap;}
+.legend span{display:flex;align-items:center;gap:5px;}
+.legend i{width:9px;height:9px;border-radius:3px;display:inline-block;}
+.bars{display:flex;flex-direction:column;gap:12px;}
+.bar-row{display:flex;align-items:center;gap:12px;}
+.bar-row .bl{width:110px;font-size:12.5px;color:var(--ink-soft);flex:0 0 110px;}
+.bar-track{flex:1;height:20px;background:#EFECE2;border-radius:5px;overflow:hidden;}
+.bar-fill{height:100%;background:linear-gradient(90deg,var(--navy-3),var(--navy));border-radius:5px;display:flex;align-items:center;justify-content:flex-end;padding-inline-end:8px;}
+.bar-fill span{color:#fff;font-size:10.5px;font-weight:700;}
+.qwrap{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;font-size:12.5px;}
+.qwrap .ok{color:var(--teal);font-weight:800;} .qwrap .no{color:var(--red);font-weight:800;}
+.qwrap .qn{color:var(--ink-soft);width:60px;flex:0 0 60px;}
+.warn-item{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #EFECE2;font-size:12.5px;}
+.warn-item:last-child{border-bottom:none;}
+.warn-item .ic{color:var(--amber);font-size:15px;}
+.warn-item .tm{color:var(--ink-soft);font-size:11px;margin-inline-start:auto;white-space:nowrap;}
+
+/* ================= LAYOUT MODES ================= */
+body.sb-collapsed .app-sidebar{width:76px;flex:0 0 76px;padding:20px 10px;}
+body.sb-collapsed .sb-brand{justify-content:center;padding-bottom:16px;}
+body.sb-collapsed .sb-brand-txt,body.sb-collapsed .sb-search,body.sb-collapsed .grp,body.sb-collapsed .pill,
+body.sb-collapsed .sb-user .nm,body.sb-collapsed .sb-user .rl,body.sb-collapsed .sb-user svg{display:none;}
+body.sb-collapsed .app-nav a{font-size:0;justify-content:center;padding:11px;}
+body.sb-collapsed .app-nav a.on::before{right:-10px;}
+body.sb-collapsed .sb-user{justify-content:center;padding:8px 0;}
+body.sb-collapsed .app-main{max-width:none;}
+
+body.layout-top .app-shell{flex-direction:column;}
+body.layout-top .app-sidebar{width:100%;flex:none;flex-direction:row;align-items:center;padding:8px 22px;gap:6px;background:linear-gradient(90deg,var(--navy) 0%,#16264A 100%);}
+body.layout-top .sb-brand{border-bottom:none;margin-bottom:0;padding:0;flex:0 0 auto;margin-inline-end:10px;}
+body.layout-top .sb-search{display:none;}
+body.layout-top .app-nav{flex:1;display:flex;flex-direction:row;overflow-x:auto;gap:2px;scrollbar-width:none;align-items:center;}
+body.layout-top .app-nav::-webkit-scrollbar{display:none;}
+body.layout-top .nav-group{flex:0 0 auto;}
+body.layout-top .grp{display:none;}
+body.layout-top .grp-btn{
+  display:flex;align-items:center;gap:6px;background:transparent;border:none;color:#AEB8D2;
+  font-family:var(--font);font-size:12.5px;padding:9px 13px;border-radius:8px;cursor:pointer;white-space:nowrap;
+}
+body.layout-top .grp-btn:hover{background:rgba(255,255,255,.07);color:#fff;}
+body.layout-top .grp-btn .chev{font-size:9px;opacity:.6;transition:transform .12s;}
+body.layout-top .nav-group.has-active .grp-btn{color:#fff;font-weight:700;box-shadow:inset 0 -2px 0 var(--gold);}
+body.layout-top .nav-group.open .grp-btn{background:rgba(255,255,255,.09);color:#fff;}
+body.layout-top .nav-group.open .grp-btn .chev{transform:rotate(180deg);}
+body.layout-top .grp-items{
+  display:none;position:absolute;top:calc(100% + 6px);right:0;min-width:230px;
+  background:var(--navy-2);border:1px solid rgba(255,255,255,.12);border-radius:12px;
+  padding:8px;box-shadow:0 16px 34px rgba(0,0,0,.4);z-index:60;
+}
+body.layout-top .nav-group.open .grp-items{display:flex;flex-direction:column;}
+body.layout-top .grp-items a{white-space:nowrap;}
+body.layout-top .sb-foot{border-top:none;margin-top:0;padding-top:0;flex:0 0 auto;margin-inline-start:auto;}
+body.layout-top .sb-user{padding:4px 6px;}
+body.layout-top .sb-user .rl,body.layout-top .sb-user svg{display:none;}
+
+/* ================= FINAL COMPLETION MODULES ================= */
+.filter-bar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+.filter-bar input[type=text]{max-width:220px;}
+.filter-bar select{max-width:160px;width:auto;}
+.filter-chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;padding:6px 12px;border-radius:20px;border:1px solid var(--line);background:#fff;cursor:pointer;}
+.filter-chip.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+
+.stepper{display:flex;align-items:center;flex-wrap:wrap;gap:0;margin-bottom:18px;}
+.step{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink-soft);padding:6px 10px;}
+.step .dotn{width:22px;height:22px;border-radius:50%;background:#EDEBE4;color:var(--ink-soft);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex:0 0 22px;}
+.step.done .dotn{background:var(--teal);color:#fff;}
+.step.current .dotn{background:var(--gold);color:#241D0B;}
+.step.current{color:var(--navy);font-weight:700;}
+.step-line{width:20px;height:2px;background:var(--line);}
+
+.risk-gauge{display:flex;align-items:center;gap:14px;}
+.risk-num{font-size:30px;font-weight:800;}
+.risk-track{width:140px;height:10px;border-radius:6px;background:#EFECE2;overflow:hidden;}
+.risk-fill{height:100%;border-radius:6px;}
+
+.bell-wrap{position:relative;}
+.bell-dot{position:absolute;top:5px;left:5px;width:7px;height:7px;border-radius:50%;background:var(--red);}
+.notif-panel{position:absolute;left:0;top:44px;width:300px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:8px;z-index:20;display:none;}
+.notif-panel.open{display:block;}
+.notif-item{display:flex;gap:10px;padding:10px 8px;border-radius:8px;font-size:12px;}
+.notif-item:hover{background:#F6F4EE;}
+.notif-item b{display:block;font-size:12.5px;margin-bottom:2px;}
+.notif-item .t{color:var(--ink-soft);font-size:10.5px;}
+
+.diff{display:flex;align-items:center;gap:8px;font-size:12px;}
+.diff .old{color:var(--red);text-decoration:line-through;}
+.diff .new{color:var(--teal);font-weight:700;}
+
+.flagtoggle{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:12.5px;font-weight:600;border:1px solid var(--line);background:#fff;color:var(--ink-soft);cursor:pointer;}
+.flagtoggle.on{background:var(--amber-soft);border-color:var(--amber);color:var(--amber);}
+.qnav .flag{background:var(--amber-soft);color:var(--amber);border-color:var(--amber);}
+
+.health-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #EFECE2;font-size:12.5px;}
+.health-row:last-child{border-bottom:none;}
+.health-dot{width:9px;height:9px;border-radius:50%;background:#3C9C74;display:inline-block;margin-inline-end:8px;}
+
+@media(max-width:980px){
+  .app-shell{flex-direction:column;}
+  .app-sidebar{width:100%;flex-direction:row;flex-wrap:wrap;padding:12px 16px;}
+  .app-sidebar .sb-search,.app-sidebar .app-nav{width:100%;}
+  .app-nav{display:flex;flex-wrap:wrap;flex-direction:row;}
+  .grp{width:100%;}
+  .app-main{padding:18px 16px;}
+  .grid-4{grid-template-columns:repeat(2,1fr);}
+  .lab-grid{grid-template-columns:1fr;}
+}
+
+
+/* ================= v4 completions ================= */
+.qr-box{width:88px;height:88px;background:#fff;border:1px solid var(--line);border-radius:6px;padding:6px;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);gap:1px;flex:0 0 88px;}
+.qr-box i{background:#1B1B18;border-radius:1px;}
+.qr-box i.off{background:transparent;}
+
+.risk-meter{height:10px;border-radius:6px;background:linear-gradient(90deg,#3C9C74 0%,#3C9C74 33%,var(--amber) 33%,var(--amber) 66%,var(--red) 66%,var(--red) 100%);position:relative;margin:10px 0 6px;}
+.risk-meter .marker{position:absolute;top:-4px;width:3px;height:18px;background:var(--navy);border-radius:2px;}
+.risk-list{display:flex;flex-direction:column;gap:6px;font-size:12.5px;}
+.risk-list .rr{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #EFECE2;}
+
+.star-btn{width:38px;height:38px;border-radius:8px;border:1px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);cursor:pointer;}
+.star-btn.on{background:var(--amber-soft);border-color:var(--amber);color:var(--amber);}
+
+.tabpanel{display:none;}
+.tabpanel.show{display:block;}
+
+.notif-item{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #EFECE2;font-size:12.5px;}
+.notif-item:last-child{border-bottom:none;}
+.notif-item .dotc{width:8px;height:8px;border-radius:50%;background:var(--navy-3);margin-top:5px;flex:0 0 8px;}
+.notif-item.new .dotc{background:var(--red);}
+.notif-item .tm{color:var(--ink-soft);font-size:11px;margin-inline-start:auto;white-space:nowrap;}
+
+.health-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #EFECE2;font-size:12.5px;}
+.health-row:last-child{border-bottom:none;}
+.dotstat{width:9px;height:9px;border-radius:50%;display:inline-block;margin-inline-start:6px;}
+.dotstat.g{background:#3C9C74;} .dotstat.y{background:var(--amber);} .dotstat.r{background:var(--red);}
+
+.stepper{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-bottom:18px;}
+.step{padding:6px 12px;border-radius:20px;background:#EFECE2;color:var(--ink-soft);}
+.step.done{background:var(--teal-soft);color:var(--teal);font-weight:600;}
+.step.cur{background:var(--navy);color:#fff;font-weight:700;}
+.step-arrow{color:var(--line);}
+
+
+@media(max-width:900px){.proto-shell{flex-direction:column;}.proto-nav{width:100%;flex:none;max-height:220px;}}
+</style>
+</head>
+<body>
+<div class="proto-shell">
+
+  <nav class="proto-nav">
+    <h1>سیستم امتحان زبان — کندز</h1>
+    <div class="sub">UI/UX Prototype v3 · یکپارچه‌شده</div>
+    <div class="proto-controls">
+      <div class="proto-toggle" id="toggle-layout"><span>چیدمان: نوار بالایی (Top Navbar)</span><span class="sw"><i></i></span></div>
+      <div class="proto-toggle" id="toggle-collapse"><span>جمع‌کردن منو (Icon-only)</span><span class="sw"><i></i></span></div>
+    </div>
+    <div class="proto-note">Sidebar همهٔ صفحات ادمین اکنون از یک منبع واحد (JS) ساخته می‌شود — یعنی در نسخهٔ نهایی هم فقط یک‌بار کامپوننت نویسی می‌شود، نه برای هر صفحه جداگانه.</div>
+
+    <div class="proto-group">مشترک</div>
+    <button class="proto-btn active" data-target="login"><span class="proto-num">•</span>ورود به سیستم (Login واحد)</button>
+    <button class="proto-btn" data-target="login-forgot"><span class="proto-num">•</span>فراموشی رمز عبور</button>
+    <button class="proto-btn" data-target="login-2fa"><span class="proto-num">•</span>تأیید دومرحله‌ای (2FA)</button>
+
+    <div class="proto-group">ادمین — اصلی</div>
+    <button class="proto-btn" data-target="dash"><span class="proto-num">•</span>داشبورد</button>
+
+    <div class="proto-group">ادمین — امتحانات</div>
+    <button class="proto-btn" data-target="exams-list"><span class="proto-num">•</span>لیست آزمون‌ها</button>
+    <button class="proto-btn" data-target="exam-create"><span class="proto-num">•</span>ایجاد/ویرایش آزمون</button>
+    <button class="proto-btn" data-target="pool"><span class="proto-num">•</span>Question Pool</button>
+
+    <div class="proto-group">ادمین — بانک سوالات</div>
+    <button class="proto-btn" data-target="questions"><span class="proto-num">•</span>همهٔ سوالات</button>
+    <button class="proto-btn" data-target="q-grammar"><span class="proto-num">•</span>افزودن Grammar</button>
+    <button class="proto-btn" data-target="q-listening"><span class="proto-num">•</span>افزودن Listening (Audio)</button>
+    <button class="proto-btn" data-target="q-video"><span class="proto-num">•</span>افزودن Listening (Video)</button>
+    <button class="proto-btn" data-target="q-reading"><span class="proto-num">•</span>افزودن Reading Passage</button>
+    <button class="proto-btn" data-target="q-approval"><span class="proto-num">•</span>تأیید سوالات (Approval)</button>
+    <button class="proto-btn" data-target="q-version"><span class="proto-num">•</span>Versioning سوال</button>
+
+    <div class="proto-group">ادمین — متقاضیان</div>
+    <button class="proto-btn" data-target="candidates"><span class="proto-num">•</span>لیست متقاضیان</button>
+    <button class="proto-btn" data-target="candidate-add"><span class="proto-num">•</span>افزودن دستی متقاضی</button>
+    <button class="proto-btn" data-target="gen"><span class="proto-num">•</span>تولید گروهی</button>
+    <button class="proto-btn" data-target="import"><span class="proto-num">•</span>Import از Excel (+ Validation)</button>
+    <button class="proto-btn" data-target="checkin"><span class="proto-num">•</span>Check-in و تأیید هویت</button>
+    <button class="proto-btn" data-target="cards"><span class="proto-num">•</span>کارت‌های ورود (+ QR)</button>
+
+    <div class="proto-group">ادمین — جلسات و لابراتوار</div>
+    <button class="proto-btn" data-target="sessions"><span class="proto-num">•</span>جلسات امتحان (زنده+Attempts)</button>
+    <button class="proto-btn" data-target="labs"><span class="proto-num">•</span>لابراتوارها و کامپیوترها</button>
+    <button class="proto-btn" data-target="shifts"><span class="proto-num">•</span>مدیریت شفت‌ها</button>
+    <button class="proto-btn" data-target="auto-assign"><span class="proto-num">•</span>Auto-Assign کامپیوتر</button>
+    <button class="proto-btn" data-target="transfer-form"><span class="proto-num">•</span>فرم انتقال Session</button>
+    <button class="proto-btn" data-target="incidents"><span class="proto-num">•</span>مدیریت حوادث</button>
+    <button class="proto-btn" data-target="override"><span class="proto-num">•</span>Manual Override</button>
+
+    <div class="proto-group">ادمین — نتایج</div>
+    <button class="proto-btn" data-target="results"><span class="proto-num">•</span>نتایج آزمون</button>
+    <button class="proto-btn" data-target="drilldown"><span class="proto-num">•</span>نتیجهٔ متقاضی (+ Time Spent)</button>
+    <button class="proto-btn" data-target="stats"><span class="proto-num">•</span>گزارش آماری (+ Question Analytics)</button>
+
+    <div class="proto-group">ادمین — کاربران و نظارت</div>
+    <button class="proto-btn" data-target="users"><span class="proto-num">•</span>کاربران سیستم</button>
+    <button class="proto-btn" data-target="roles"><span class="proto-num">•</span>نقش‌ها و دسترسی‌ها</button>
+    <button class="proto-btn" data-target="audit"><span class="proto-num">•</span>لاگ فعالیت‌ها (+ Old/New)</button>
+    <button class="proto-btn" data-target="anticheat"><span class="proto-num">•</span>ضدتقلب (+ Risk Score)</button>
+    <button class="proto-btn" data-target="notifications"><span class="proto-num">•</span>اعلان‌ها</button>
+    <button class="proto-btn" data-target="settings"><span class="proto-num">•</span>تنظیمات (۴ تب کامل)</button>
+
+
+    <div class="proto-group">متقاضی — جریان امتحان</div>
+    <button class="proto-btn" data-target="c-instr"><span class="proto-num">•</span>دستورالعمل / آماده‌ام</button>
+    <button class="proto-btn" data-target="c-grammar"><span class="proto-num">•</span>سوال — Grammar</button>
+    <button class="proto-btn" data-target="c-listen"><span class="proto-num">•</span>سوال — Listening</button>
+    <button class="proto-btn" data-target="c-submit"><span class="proto-num">•</span>تأیید ارسال</button>
+    <button class="proto-btn" data-target="c-done"><span class="proto-num">•</span>پایان امتحان</button>
+  </nav>
+
+  <div class="proto-stage">
+
+    <!-- ============ SINGLE LOGIN (role-agnostic) ============ -->
+    <section class="screen active" id="login">
+      <div class="cand-shell"><div class="cand-center">
+        <div class="cand-card" style="max-width:400px;">
+          <div style="text-align:center;margin-bottom:26px;">
+            <div style="width:44px;height:44px;border-radius:11px;background:linear-gradient(135deg,var(--gold),#8A6D2F);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1B1608;font-size:17px;margin:0 auto 12px;">ک</div>
+            <div style="font-weight:800;font-size:16px;color:var(--navy);">پوهنتون کندز</div>
+            <div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px;">سیستم مدیریت و برگزاری امتحان زبان</div>
+          </div>
+          <div class="field"><label>نام کاربری / کد متقاضی</label><input placeholder="مثلاً e.safi یا KND001"></div>
+          <div class="field"><label>رمز عبور</label><input type="password" placeholder="••••••••"></div>
+          <button class="btn btn-primary" style="width:100%;padding:12px;justify-content:center;">ورود به سیستم</button>
+          <div class="helper" style="text-align:center;margin-top:14px;line-height:1.8;">
+            یک درگاه ورود برای همه — سیستم به‌صورت خودکار بر اساس نقش شما (Super Admin، Exam Administrator، Lab Manager، یا متقاضی امتحان) شما را به پنل مناسب هدایت می‌کند.
+          </div>
+          <div style="text-align:center;margin-top:10px;"><a class="btn-ghost" style="font-size:11.5px;">رمز عبور را فراموش کرده‌اید؟</a></div>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- FORGOT PASSWORD -->
+    <section class="screen" id="login-forgot">
+      <div class="cand-shell"><div class="cand-center">
+        <div class="cand-card" style="max-width:400px;">
+          <div style="font-weight:800;font-size:16px;color:var(--navy);margin-bottom:6px;">فراموشی رمز عبور</div>
+          <div class="helper" style="margin-bottom:20px;">یک لینک بازیابی به ایمیل ثبت‌شدهٔ شما ارسال می‌شود (برای متقاضیان، فقط از طریق Lab Manager/Admin قابل بازنشانی است).</div>
+          <div class="field"><label>یوزرنیم یا ایمیل</label><input placeholder="e.safi"></div>
+          <button class="btn btn-primary" style="width:100%;padding:12px;justify-content:center;">ارسال لینک بازیابی</button>
+          <div style="text-align:center;margin-top:14px;"><a class="btn-ghost" style="font-size:11.5px;">بازگشت به ورود</a></div>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 2FA -->
+    <section class="screen" id="login-2fa">
+      <div class="cand-shell"><div class="cand-center">
+        <div class="cand-card" style="max-width:400px;text-align:center;">
+          <div style="font-weight:800;font-size:16px;color:var(--navy);margin-bottom:6px;">تأیید دومرحله‌ای</div>
+          <div class="helper" style="margin-bottom:20px;">کد ۶ رقمی ارسال‌شده به شمارهٔ همراه/ایمیل شما را وارد کنید. (فقط برای حساب‌های Super Admin و Exam Administrator فعال است.)</div>
+          <div class="row" style="max-width:260px;margin:0 auto 18px;gap:8px;">
+            <input style="text-align:center;font-size:18px;" maxlength="1" value="۴"><input style="text-align:center;font-size:18px;" maxlength="1" value="۷"><input style="text-align:center;font-size:18px;" maxlength="1"><input style="text-align:center;font-size:18px;" maxlength="1"><input style="text-align:center;font-size:18px;" maxlength="1"><input style="text-align:center;font-size:18px;" maxlength="1">
+          </div>
+          <button class="btn btn-primary" style="width:100%;padding:12px;justify-content:center;">تأیید و ورود</button>
+          <div class="helper" style="margin-top:12px;">ارسال مجدد کد تا ۰۰:۴۵ دیگر</div>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- ============ ADMIN SCREENS (sidebar auto-injected) ============ -->
+
+    <section class="screen" id="dash">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="dash" data-user="ای|ایمل صافی|Exam Administrator"></aside>
+        <main class="app-main">
+          <div class="app-topbar">
+            <div><div class="crumb">پوهنتون کندز / <b>داشبورد</b></div><h2>داشبورد مدیریت</h2></div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div class="icon-btn bell-wrap"><span class="bell-dot"></span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
+              <div class="user-chip"><div class="avatar">ای</div>ایمل صافی</div>
+            </div>
+            <div class="stat" style="--stat-c:var(--gold);"><div class="num">۳</div><div class="lbl">آزمون فعال</div></div>
+            <div class="stat" style="--stat-c:var(--navy-3);"><div class="num">۱۲۴</div><div class="lbl">متقاضی ثبت‌شده</div></div>
+            <div class="stat" style="--stat-c:var(--teal);"><div class="num">۱۸</div><div class="lbl">در حال امتحان دادن</div></div>
+            <div class="stat" style="--stat-c:var(--amber);"><div class="num">۹۶٪</div><div class="lbl">نرخ تکمیل امتحان</div></div>
+          </div>
+          <div class="row">
+            <div class="card">
+              <div style="font-weight:700;margin-bottom:12px;">جلسات فعال اکنون</div>
+              <table>
+                <tr><th>متقاضی</th><th>آزمون</th><th>سوال</th><th>باقیمانده</th><th>وضعیت</th></tr>
+                <tr><td>احمد ولی</td><td>Batch A</td><td>۲۱ / ۵۰</td><td>۳۸:۱۲</td><td><span class="badge on">در حال امتحان</span></td></tr>
+                <tr><td>مریم رضایی</td><td>Batch A</td><td>۷ / ۵۰</td><td>۵۲:۴۰</td><td><span class="badge on">در حال امتحان</span></td></tr>
+                <tr><td>سمیع الله</td><td>Batch B</td><td>—</td><td>—</td><td><span class="badge bad">قطع اتصال</span></td></tr>
+              </table>
+            </div>
+            <div class="card" style="max-width:280px;">
+              <div style="font-weight:700;margin-bottom:12px;">فعالیت‌های اخیر</div>
+              <div style="font-size:12.5px;line-height:2.1;color:var(--ink-soft);">افزوده‌شدن ۲۰ متقاضی جدید<br>آزمون «Batch B» منتشر شد<br>۶ سوال گرامر اضافه شد<br>کارت‌های ورود چاپ شد</div>
+            </div>
+            <div class="card" style="max-width:220px;">
+              <div style="font-weight:700;margin-bottom:12px;">System Health</div>
+              <div class="health-row"><span><span class="health-dot"></span>API</span><span class="badge on">Online</span></div>
+              <div class="health-row"><span><span class="health-dot"></span>Database</span><span class="badge on">Online</span></div>
+              <div class="health-row"><span><span class="health-dot"></span>Redis / Queue</span><span class="badge on">Online</span></div>
+              <div class="health-row"><span><span class="health-dot" style="background:var(--amber);"></span>WebSocket</span><span class="badge pending">کند</span></div>
+              <div class="health-row"><span><span class="health-dot"></span>Storage</span><span class="badge on">Online</span></div>
+              <div class="helper" style="margin-top:8px;">کاربران فعال: ۲۴ · آزمون فعال: ۱</div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="exams-list">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="exams-list" data-user="ای|ایمل صافی|Exam Administrator"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">پوهنتون کندز / <b>آزمون‌ها</b></div><h2>آزمون‌ها</h2></div><button class="btn btn-gold">+ ایجاد آزمون جدید</button></div>
+          <div class="card">
+            <table>
+              <tr><th>عنوان آزمون</th><th>سوالات</th><th>مدت</th><th>تاریخ</th><th>وضعیت</th><th></th></tr>
+              <tr><td>English Language — Batch A</td><td>۵۰</td><td>۶۰ دقیقه</td><td>۱۴۰۴/۰۶/۱۲</td><td><span class="badge on">فعال</span></td><td><a class="btn-ghost">ویرایش</a></td></tr>
+              <tr><td>English Language — Batch B</td><td>۵۰</td><td>۶۰ دقیقه</td><td>۱۴۰۴/۰۶/۱۴</td><td><span class="badge pending">منتشرشده</span></td><td><a class="btn-ghost">ویرایش</a></td></tr>
+              <tr><td>English Language — Batch C (پیش‌نویس)</td><td>۳۲</td><td>۶۰ دقیقه</td><td>—</td><td><span class="badge off">Draft</span></td><td><a class="btn-ghost">ویرایش</a></td></tr>
+              <tr><td>English Language — دور قبلی</td><td>۵۰</td><td>۶۰ دقیقه</td><td>۱۴۰۴/۰۵/۰۲</td><td><span class="badge off">آرشیو</span></td><td><a class="btn-ghost">مشاهده</a></td></tr>
+            </table>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="exam-create">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="exam-create" data-user="ای|ایمل صافی|Exam Administrator"></aside>
+        <main class="app-main" style="max-width:720px;">
+          <div class="app-topbar"><div><div class="crumb">آزمون‌ها / <b>ایجاد جدید</b></div><h2>ایجاد آزمون جدید</h2></div></div>
+          <div class="card">
+            <div class="field"><label>عنوان آزمون</label><input value="English Language Examination"></div>
+            <div class="field"><label>توضیحات</label><textarea rows="2">امتحان زبان انگلیسی برای متقاضیان بست‌های کادری</textarea></div>
+            <div class="row">
+              <div class="field"><label>مدت زمان (دقیقه)</label><input value="60"></div>
+              <div class="field"><label>نمره کل</label><input value="100"></div>
+              <div class="field"><label>نمره قبولی</label><input value="60"></div>
+            </div>
+            <div class="row">
+              <div class="field"><label>تاریخ شروع</label><input value="۱۴۰۴/۰۶/۱۲ — ۰۸:۰۰"></div>
+              <div class="field"><label>تاریخ پایان</label><input value="۱۴۰۴/۰۶/۱۲ — ۱۶:۰۰"></div>
+            </div>
+            <div class="section-title">بخش‌های آزمون</div>
+            <div class="row" style="margin-bottom:10px;">
+              <div class="stat" style="--stat-c:var(--gold);"><div class="lbl">Grammar</div><div class="num" style="font-size:16px;">۲۰</div></div>
+              <div class="stat" style="--stat-c:var(--teal);"><div class="lbl">Vocabulary</div><div class="num" style="font-size:16px;">۱۰</div></div>
+              <div class="stat" style="--stat-c:var(--navy-3);"><div class="lbl">Reading</div><div class="num" style="font-size:16px;">۱۰</div></div>
+              <div class="stat" style="--stat-c:var(--amber);"><div class="lbl">Listening</div><div class="num" style="font-size:16px;">۱۰</div></div>
+            </div>
+            <button class="btn btn-outline">+ افزودن بخش جدید</button>
+            <div class="section-title">تنظیمات پیشرفته</div>
+            <div class="row">
+              <div class="field"><label>حرکت به سوال قبلی</label><select><option>مجاز</option><option>غیرمجاز</option></select></div>
+              <div class="field"><label>ترتیب تصادفی سوالات</label><select><option>فعال</option><option>غیرفعال</option></select></div>
+              <div class="field"><label>نمایش نتیجه بعد از اتمام</label><select><option>خیر</option><option>بلی</option></select></div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:8px;"><button class="btn btn-outline">ذخیره Draft</button><button class="btn btn-teal">انتشار آزمون</button></div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="pool">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="pool" data-user="کی|کریم یوسفی|Question Manager"></aside>
+        <main class="app-main" style="max-width:640px;">
+          <div class="app-topbar"><div><div class="crumb">آزمون‌ها / <b>Question Pool</b></div><h2>Question Pool — Batch A</h2></div></div>
+          <div class="card">
+            <div class="helper" style="margin-bottom:16px;">به‌جای سوالات ثابت، از هر بخش یک مجموعهٔ تصادفی از Pool انتخاب می‌شود؛ هر متقاضی سوالات و ترتیب گزینه‌های متفاوتی می‌بیند.</div>
+            <table>
+              <tr><th>بخش</th><th>مجموع Pool</th><th>تعداد انتخابی</th><th>Randomize گزینه‌ها</th></tr>
+              <tr><td>Grammar</td><td>۱۰۰</td><td>۲۰</td><td><span class="chk on">✓</span></td></tr>
+              <tr><td>Vocabulary</td><td>۵۰</td><td>۱۰</td><td><span class="chk on">✓</span></td></tr>
+              <tr><td>Reading</td><td>۳۰</td><td>۱۰</td><td><span class="chk on">✓</span></td></tr>
+              <tr><td>Listening</td><td>۲۵</td><td>۱۰</td><td><span class="chk"></span></td></tr>
+            </table>
+            <div class="section-title">پیش‌نمایش تخصیص</div>
+            <div class="row">
+              <div class="stat"><div class="lbl">احمد ولی</div><div class="num" style="font-size:14px;">Q1, Q5, Q17, Q22 …</div></div>
+              <div class="stat"><div class="lbl">مریم رضایی</div><div class="num" style="font-size:14px;">Q3, Q8, Q19, Q27 …</div></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="questions">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="questions" data-user="کی|کریم یوسفی|Question Manager"></aside>
+        <main class="app-main">
+          <div class="app-topbar">
+            <div><div class="crumb">پوهنتون کندز / <b>بانک سوالات</b></div><h2>بانک سوالات</h2></div>
+            <div style="display:flex;gap:8px;"><button class="btn btn-outline">+ سوال گرامر</button><button class="btn btn-gold">+ سوال لیسنینگ</button></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+            <span class="badge on">همه (۸۶)</span><span class="badge off">Grammar (۴۲)</span><span class="badge off">Vocabulary (۱۸)</span>
+            <span class="badge off">Reading (۱۲)</span><span class="badge off">Listening Audio (۹)</span><span class="badge off">Listening Video (۵)</span>
+          </div>
+          <div class="filter-bar">
+            <input type="text" placeholder="جستجو در متن سوال… مثلاً Present Perfect">
+            <select><option>سطح دشواری: همه</option><option>آسان</option><option>متوسط</option><option>سخت</option></select>
+            <select><option>موضوع: همه</option><option>Tenses</option><option>Prepositions</option><option>Vocabulary — Academic</option></select>
+            <select><option>وضعیت: همه</option><option>Draft</option><option>Under Review</option><option>Approved</option><option>Active</option><option>Inactive</option><option>Archived</option></select>
+            <select><option>ایجادکننده: همه</option><option>کریم یوسفی</option><option>سارا نظری</option></select>
+            <select><option>استفاده‌شده: همه</option><option>استفاده‌شده در آزمون</option><option>استفاده‌نشده</option></select>
+          </div>
+          <div class="card">
+            <table>
+              <tr><th>سوال</th><th>نوع</th><th>گزینه‌ها</th><th>نمره</th><th>وضعیت</th><th></th></tr>
+              <tr><td>She _____ to university every day.</td><td>Grammar</td><td>۴ گزینه</td><td>۲</td><td><span class="badge on">Active</span></td><td><a class="btn-ghost">ویرایش</a></td></tr>
+              <tr><td>Choose the closest synonym for "abundant".</td><td>Vocabulary</td><td>۴ گزینه</td><td>۲</td><td><span class="badge on">Active</span></td><td><a class="btn-ghost">ویرایش</a></td></tr>
+              <tr><td>english-listening-01.mp3 (۶ سوال وابسته)</td><td>Listening Audio</td><td>۴ گزینه هرکدام</td><td>۱۲</td><td><span class="badge on">Active</span></td><td><a class="btn-ghost">مشاهده</a></td></tr>
+              <tr><td>interview-video-02.mp4 (۴ سوال وابسته)</td><td>Listening Video</td><td>۴ گزینه هرکدام</td><td>۸</td><td><span class="badge pending">Under Review</span></td><td><a class="btn-ghost">مشاهده</a></td></tr>
+            </table>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="q-grammar">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="questions" data-user="کی|کریم یوسفی|Question Manager"></aside>
+        <main class="app-main" style="max-width:640px;">
+          <div class="app-topbar"><div><div class="crumb">بانک سوالات / <b>سوال جدید</b></div><h2>افزودن سوال — Grammar</h2></div></div>
+          <div class="card">
+            <div class="field"><label>بخش</label><select><option>Grammar</option><option>Vocabulary</option><option>Reading</option></select></div>
+            <div class="field"><label>متن سوال</label><textarea rows="2">She _____ to university every day.</textarea></div>
+            <div class="section-title">گزینه‌ها — جواب صحیح را انتخاب کنید</div>
+            <div class="opt sel"><div class="dot"></div>A. go</div>
+            <div class="opt"><div class="dot"></div>B. goes</div>
+            <div class="opt"><div class="dot"></div>C. going</div>
+            <div class="opt"><div class="dot"></div>D. gone</div>
+            <div class="row" style="margin-top:6px;">
+              <div class="field"><label>سطح دشواری</label><select><option>متوسط</option><option>آسان</option><option>سخت</option></select></div>
+              <div class="field"><label>موضوع (Topic)</label><input value="Tenses"></div>
+              <div class="field"><label>نمره</label><input value="2"></div>
+            </div>
+            <button class="btn btn-primary">ذخیره و افزودن سوال بعدی</button>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="q-listening">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="questions" data-user="کی|کریم یوسفی|Question Manager"></aside>
+        <main class="app-main" style="max-width:640px;">
+          <div class="app-topbar"><div><div class="crumb">بانک سوالات / <b>Listening جدید</b></div><h2>افزودن مجموعهٔ Listening</h2></div></div>
+          <div class="card">
+            <div class="field"><label>نوع فایل</label><div style="display:flex;gap:8px;"><span class="badge on">صوتی</span><span class="badge off">ویدیویی</span></div></div>
+            <div class="field"><label>فایل صوتی</label><div style="border:1.5px dashed var(--line);border-radius:9px;padding:20px;text-align:center;color:var(--ink-soft);font-size:12.5px;">english-listening-01.mp3 — ۴:۱۲ دقیقه<br><span style="color:var(--navy);font-weight:600;">تعویض فایل</span></div></div>
+            <div class="section-title">تنظیمات پخش (Audio Policy)</div>
+            <div class="row">
+              <div class="field"><label>تعداد دفعات مجاز پخش</label><select><option>۱ بار</option><option>۲ بار</option><option>نامحدود</option></select></div>
+              <div class="field"><label>Pause</label><select><option>مجاز</option><option>غیرمجاز</option></select></div>
+              <div class="field"><label>سرعت پخش</label><select><option>۱x (ثابت)</option><option>قابل تغییر</option></select></div>
+            </div>
+            <div class="section-title">سوالات وابسته (۶ سوال)</div>
+            <div class="card" style="background:#FAF9F5;margin-bottom:10px;box-shadow:none;">
+              <div style="font-weight:600;font-size:13px;margin-bottom:8px;">سوال ۱: گوینده در چه ساعتی به دفتر می‌رسد؟</div>
+              <div class="opt sel" style="padding:9px 12px;"><div class="dot"></div>A. ۷:۳۰ صبح</div>
+              <div class="opt" style="padding:9px 12px;margin-bottom:0;"><div class="dot"></div>B. ۸:۰۰ صبح</div>
+            </div>
+            <button class="btn btn-outline">+ افزودن سوال به همین فایل</button>
+            <div style="margin-top:16px;"><button class="btn btn-primary">ذخیره مجموعه</button></div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- VIDEO LISTENING -->
+    <section class="screen" id="q-video">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="questions" data-user="کی|کریم یوسفی|Question Manager"></aside>
+        <main class="app-main" style="max-width:640px;">
+          <div class="app-topbar"><div><div class="crumb">بانک سوالات / <b>Video جدید</b></div><h2>افزودن مجموعهٔ Listening — Video</h2></div></div>
+          <div class="card">
+            <div class="field"><label>نوع فایل</label><div style="display:flex;gap:8px;"><span class="badge off">صوتی</span><span class="badge on">ویدیویی</span></div></div>
+            <div class="field"><label>فایل ویدیویی</label><div style="border:1.5px dashed var(--line);border-radius:9px;padding:20px;text-align:center;color:var(--ink-soft);font-size:12.5px;">interview-video-02.mp4 — ۵:۴۲ دقیقه<br><span style="color:var(--navy);font-weight:600;">تعویض فایل</span></div></div>
+            <div class="section-title">تنظیمات پخش (Playback Policy)</div>
+            <div class="row">
+              <div class="field"><label>غیرفعال‌کردن Seek (پرش زمانی)</label><select><option>فعال</option><option>غیرفعال</option></select></div>
+              <div class="field"><label>غیرفعال‌کردن دانلود</label><select><option>فعال</option><option>غیرفعال</option></select></div>
+              <div class="field"><label>Replay مجاز</label><select><option>خیر</option><option>۱ بار</option></select></div>
+            </div>
+            <div class="section-title">سوالات وابسته (۴ سوال)</div>
+            <div class="card" style="background:#FAF9F5;margin-bottom:10px;box-shadow:none;">
+              <div style="font-weight:600;font-size:13px;margin-bottom:8px;">سوال ۱: موضوع اصلی مصاحبه چیست؟</div>
+              <div class="opt sel" style="padding:9px 12px;"><div class="dot"></div>A. فرصت‌های شغلی</div>
+              <div class="opt" style="padding:9px 12px;margin-bottom:0;"><div class="dot"></div>B. آموزش عالی</div>
+            </div>
+            <button class="btn btn-outline">+ افزودن سوال به همین ویدیو</button>
+            <div style="margin-top:16px;"><button class="btn btn-primary">ذخیره مجموعه</button></div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- READING PASSAGE -->
+    <section class="screen" id="q-reading">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="questions" data-user="کی|کریم یوسفی|Question Manager"></aside>
+        <main class="app-main" style="max-width:640px;">
+          <div class="app-topbar"><div><div class="crumb">بانک سوالات / <b>Reading جدید</b></div><h2>افزودن Reading Passage</h2></div></div>
+          <div class="card">
+            <div class="field"><label>عنوان متن</label><input value="The Importance of Education"></div>
+            <div class="field"><label>متن Passage</label><textarea rows="6">Education plays an important role in shaping the future of individuals and societies. It provides people with the knowledge and skills necessary to contribute meaningfully to their communities...</textarea></div>
+            <div class="section-title">سوالات وابسته به این متن (۴ سوال)</div>
+            <div class="card" style="background:#FAF9F5;margin-bottom:10px;box-shadow:none;">
+              <div style="font-weight:600;font-size:13px;margin-bottom:8px;">سوال ۱: What is the main idea of the passage?</div>
+              <div class="opt sel" style="padding:9px 12px;"><div class="dot"></div>A. Education shapes individuals and societies</div>
+              <div class="opt" style="padding:9px 12px;margin-bottom:0;"><div class="dot"></div>B. Schools are expensive</div>
+            </div>
+            <button class="btn btn-outline">+ افزودن سوال به همین متن</button>
+            <div style="margin-top:16px;"><button class="btn btn-primary">ذخیره Passage</button></div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- QUESTION APPROVAL WORKFLOW -->
+    <section class="screen" id="q-approval">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="q-approval" data-user="سن|سارا نظری|Reviewer"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">بانک سوالات / <b>تأیید سوالات</b></div><h2>تأیید سوالات (Approval Workflow)</h2></div></div>
+          <div class="stepper">
+            <div class="step done">Draft</div><div class="step-arrow">←</div>
+            <div class="step cur">Under Review</div><div class="step-arrow">←</div>
+            <div class="step">Approved</div><div class="step-arrow">←</div>
+            <div class="step">Active در Pool</div>
+          </div>
+          <div class="card">
+            <table>
+              <tr><th>سوال</th><th>بخش</th><th>ایجادکننده</th><th>وضعیت</th><th></th></tr>
+              <tr><td>Choose the correct preposition...</td><td>Grammar</td><td>کریم یوسفی</td><td><span class="badge pending">Under Review</span></td><td><button class="btn btn-teal" style="padding:5px 12px;font-size:11.5px;">تأیید</button> <button class="btn btn-outline" style="padding:5px 12px;font-size:11.5px;">رد</button></td></tr>
+              <tr><td>What is the synonym of "diligent"?</td><td>Vocabulary</td><td>کریم یوسفی</td><td><span class="badge pending">Under Review</span></td><td><button class="btn btn-teal" style="padding:5px 12px;font-size:11.5px;">تأیید</button> <button class="btn btn-outline" style="padding:5px 12px;font-size:11.5px;">رد</button></td></tr>
+              <tr><td>She _____ to university every day.</td><td>Grammar</td><td>کریم یوسفی</td><td><span class="badge on">Approved</span></td><td><a class="btn-ghost">مشاهده</a></td></tr>
+            </table>
+          </div>
+          <div class="helper" style="margin-top:10px;">فقط سوالات با وضعیت Approved/Active می‌توانند وارد Question Pool امتحانِ Publish‌شده شوند.</div>
+        </main>
+      </div>
+    </section>
+
+    <!-- QUESTION VERSIONING -->
+    <section class="screen" id="q-version">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="questions" data-user="کی|کریم یوسفی|Question Manager"></aside>
+        <main class="app-main" style="max-width:640px;">
+          <div class="app-topbar"><div><div class="crumb">بانک سوالات / <b>Versioning</b></div><h2>سوال #۱۰۵ — تاریخچهٔ نسخه‌ها</h2></div></div>
+          <div class="card">
+            <div class="qwrap" style="align-items:flex-start;">
+              <span class="qn" style="width:90px;flex:0 0 90px;">Version 2</span>
+              <div style="flex:1;">
+                <div style="font-size:12.5px;">She <b>has gone</b> to university every day. <span class="badge off" style="margin-inline-start:6px;">فعلی</span></div>
+                <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">ویرایش‌شده: ۱۴۰۴/۰۶/۰۳ توسط کریم یوسفی</div>
+              </div>
+            </div>
+            <div class="qwrap" style="align-items:flex-start;">
+              <span class="qn" style="width:90px;flex:0 0 90px;">Version 1</span>
+              <div style="flex:1;">
+                <div style="font-size:12.5px;">She <b>goes</b> to university every day.</div>
+                <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">ایجاد‌شده: ۱۴۰۴/۰۶/۰۱ توسط کریم یوسفی</div>
+              </div>
+            </div>
+            <div class="helper" style="margin-top:10px;">امتحان‌های منتشرشدهٔ قبلی، سوال را از Snapshot خودشان می‌خوانند و از این تغییرات متأثر نمی‌شوند (رجوع کنید به «Exam Snapshot»).</div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="candidates">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="candidates" data-user="ای|ایمل صافی|Exam Administrator"></aside>
+        <main class="app-main">
+          <div class="app-topbar">
+            <div><div class="crumb">پوهنتون کندز / <b>متقاضیان</b></div><h2>متقاضیان</h2></div>
+            <div style="display:flex;gap:8px;"><button class="btn btn-outline">+ افزودن دستی</button><button class="btn btn-gold">+ تولید گروهی</button></div>
+          </div>
+          <div class="card">
+            <table>
+              <tr><th>نام</th><th>یوزرنیم</th><th>آزمون</th><th>شفت</th><th>وضعیت</th></tr>
+              <tr><td>احمد ولی</td><td>KND001</td><td>Batch A</td><td>۸:۰۰ صبح</td><td><span class="badge on">در حال امتحان</span></td></tr>
+              <tr><td>مریم رضایی</td><td>KND002</td><td>Batch A</td><td>۸:۰۰ صبح</td><td><span class="badge on">در حال امتحان</span></td></tr>
+              <tr><td>سمیع الله نظری</td><td>KND003</td><td>Batch A</td><td>۸:۰۰ صبح</td><td><span class="badge bad">قطع اتصال</span></td></tr>
+              <tr><td>فرشته حیدری</td><td>KND004</td><td>Batch B</td><td>۱۰:۰۰ صبح</td><td><span class="badge off">هنوز شروع نکرده</span></td></tr>
+              <tr><td>جاوید کریمی</td><td>KND005</td><td>Batch A</td><td>۸:۰۰ صبح</td><td><span class="badge on">تکمیل‌شده — ۸۴٪</span></td></tr>
+            </table>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="gen">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="candidates" data-user="ای|ایمل صافی|Exam Administrator"></aside>
+        <main class="app-main" style="max-width:560px;">
+          <div class="app-topbar"><div><div class="crumb">متقاضیان / <b>تولید گروهی</b></div><h2>تولید گروهی متقاضیان</h2></div></div>
+          <div class="card">
+            <div class="field"><label>تعداد حساب‌ها</label><input value="20"></div>
+            <div class="field"><label>آزمون تخصیص‌یافته</label><select><option>English Language — Batch B</option></select></div>
+            <div class="field"><label>شفت زمانی</label><select><option>۱۰:۰۰ صبح — لابراتوار ۲</option></select></div>
+            <div class="field"><label>پیشوند یوزرنیم</label><input value="KND"></div>
+            <button class="btn btn-primary">تولید ۲۰ حساب کاربری</button>
+            <div class="section-title">نتیجه تولید</div>
+            <table><tr><th>نام</th><th>یوزرنیم</th><th>رمز عبور</th></tr>
+              <tr><td>Candidate 001</td><td>KND006</td><td>X7P29A</td></tr>
+              <tr><td>Candidate 002</td><td>KND007</td><td>M4L81Q</td></tr>
+            </table>
+            <div class="helper">۲۰ حساب با موفقیت ایجاد شد.</div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- CANDIDATE MANUAL ADD -->
+    <section class="screen" id="candidate-add">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="candidates" data-user="ای|ایمل صافی|Exam Administrator"></aside>
+        <main class="app-main" style="max-width:560px;">
+          <div class="app-topbar"><div><div class="crumb">متقاضیان / <b>افزودن دستی</b></div><h2>افزودن متقاضی جدید</h2></div></div>
+          <div class="card">
+            <div class="row"><div class="field"><label>نام کامل</label><input placeholder="مثلاً احمد ولی"></div><div class="field"><label>کد ملی / شمارهٔ تذکره</label><input placeholder="۱۲۳۴۵۶۷۸"></div></div>
+            <div class="row"><div class="field"><label>آزمون تخصیص‌یافته</label><select><option>English Language — Batch B</option></select></div><div class="field"><label>شفت زمانی</label><select><option>۱۰:۰۰ صبح — لابراتوار ۲</option></select></div></div>
+            <div class="field" style="max-width:260px;"><label>یوزرنیم (خودکار)</label><input value="KND025" readonly></div>
+            <button class="btn btn-primary">ایجاد متقاضی</button>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- CHECK-IN & IDENTITY VERIFICATION -->
+    <section class="screen" id="checkin">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="checkin" data-user="لر|لیلا رحیمی|Lab Manager"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">متقاضیان / <b>Check-in</b></div><h2>Check-in و تأیید هویت — Batch A</h2></div></div>
+          <div class="stepper">
+            <div class="step done">ورود متقاضی</div><div class="step-arrow">←</div>
+            <div class="step cur">تأیید هویت</div><div class="step-arrow">←</div>
+            <div class="step">تخصیص کامپیوتر</div><div class="step-arrow">←</div>
+            <div class="step">شروع امتحان</div>
+          </div>
+          <div class="card" style="margin-bottom:16px;max-width:480px;">
+            <div style="font-weight:700;margin-bottom:10px;">تأیید متقاضی جاری</div>
+            <div style="font-size:12.5px;line-height:2;">نام: <b>احمد ولی</b><br>کد متقاضی: <b>KND001</b><br>کد ملی/تذکره: <b>۱۲۳۴۵۶۷۸۹</b></div>
+            <div style="display:flex;gap:10px;margin-top:14px;"><button class="btn btn-teal">✓ تأیید و Check-in</button><button class="btn btn-outline">عدم تطابق هویت</button></div>
+          </div>
+          <div class="card">
+            <table>
+              <tr><th>کد متقاضی</th><th>نام</th><th>وضعیت Check-in</th></tr>
+              <tr><td>KND001</td><td>احمد ولی</td><td><span class="badge on">✓ Checked-in</span></td></tr>
+              <tr><td>KND002</td><td>مریم رضایی</td><td><span class="badge on">✓ Checked-in</span></td></tr>
+              <tr><td>KND003</td><td>سمیع الله نظری</td><td><span class="badge bad">✗ حاضر نشده</span></td></tr>
+            </table>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="import">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="candidates" data-user="ای|ایمل صافی|Exam Administrator"></aside>
+        <main class="app-main" style="max-width:640px;">
+          <div class="app-topbar"><div><div class="crumb">متقاضیان / <b>Import از اکسل</b></div><h2>وارد کردن متقاضیان از Excel</h2></div></div>
+          <div class="card">
+            <div style="border:1.5px dashed var(--line);border-radius:9px;padding:26px;text-align:center;color:var(--ink-soft);font-size:12.5px;margin-bottom:16px;">candidates-batch-c.xlsx را رها کنید<br><span style="color:var(--navy);font-weight:600;">انتخاب فایل</span></div>
+            <div class="section-title" style="margin-top:0;">تطبیق ستون‌ها</div>
+            <table><tr><th>ستون فایل</th><th>فیلد سیستم</th></tr>
+              <tr><td>Full Name</td><td><select><option>نام کامل</option></select></td></tr>
+              <tr><td>National ID</td><td><select><option>کد ملی</option></select></td></tr>
+              <tr><td>Exam Group</td><td><select><option>آزمون تخصیص‌یافته</option></select></td></tr>
+            </table>
+            <div class="section-title">نتیجهٔ اعتبارسنجی (Validation)</div>
+            <div class="grid-3" style="margin-bottom:14px;">
+              <div class="stat" style="--stat-c:var(--teal);"><div class="num">۲۱</div><div class="lbl">معتبر</div></div>
+              <div class="stat" style="--stat-c:var(--amber);"><div class="num">۲</div><div class="lbl">تکراری</div></div>
+              <div class="stat" style="--stat-c:var(--red);"><div class="num">۱</div><div class="lbl">نامعتبر</div></div>
+            </div>
+            <table>
+              <tr><th>ردیف</th><th>خطا</th></tr>
+              <tr><td>ردیف ۱۴</td><td>کد ملی از قبل ثبت شده است</td></tr>
+              <tr><td>ردیف ۱۸</td><td>گروه آزمون یافت نشد</td></tr>
+              <tr><td>ردیف ۲۲</td><td>فیلد نام کامل خالی است</td></tr>
+            </table>
+            <div class="helper">۲۴ ردیف شناسایی شد؛ فقط ۲۱ ردیف معتبر Import می‌شود. یوزرنیم/رمز به‌صورت خودکار تولید می‌شود.</div>
+            <div style="margin-top:14px;"><button class="btn btn-primary">تأیید و Import ۲۱ متقاضی معتبر</button></div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="cards">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="cards" data-user="لر|لیلا رحیمی|Lab Manager"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">متقاضیان / <b>کارت‌های ورود</b></div><h2>کارت‌های ورود امتحان</h2></div><button class="btn btn-gold">چاپ همه (۲۰)</button></div>
+          <div class="grid-3">
+            <div class="card" style="border:1.5px solid var(--navy);display:flex;gap:12px;">
+              <div class="qr-box" id="qr1"></div>
+              <div style="flex:1;">
+                <div style="font-size:10px;color:var(--ink-soft);">پوهنتون کندز</div>
+                <div style="font-weight:800;font-size:12.5px;margin:2px 0 8px;">English Language Exam</div>
+                <div style="font-size:11.5px;line-height:1.9;">احمد ولی<br>KND001 — Lab2/PC14<br>۱۴۰۴/۰۶/۱۴ — ۱۰:۰۰</div>
+              </div>
+            </div>
+            <div class="card" style="border:1.5px solid var(--navy);display:flex;gap:12px;">
+              <div class="qr-box" id="qr2"></div>
+              <div style="flex:1;">
+                <div style="font-size:10px;color:var(--ink-soft);">پوهنتون کندز</div>
+                <div style="font-weight:800;font-size:12.5px;margin:2px 0 8px;">English Language Exam</div>
+                <div style="font-size:11.5px;line-height:1.9;">مریم رضایی<br>KND002 — Lab2/PC15<br>۱۴۰۴/۰۶/۱۴ — ۱۰:۰۰</div>
+              </div>
+            </div>
+            <div class="card" style="border:1.5px solid var(--navy);display:flex;gap:12px;">
+              <div class="qr-box" id="qr3"></div>
+              <div style="flex:1;">
+                <div style="font-size:10px;color:var(--ink-soft);">پوهنتون کندز</div>
+                <div style="font-weight:800;font-size:12.5px;margin:2px 0 8px;">English Language Exam</div>
+                <div style="font-size:11.5px;line-height:1.9;">سمیع الله نظری<br>KND003 — Lab2/PC16<br>۱۴۰۴/۰۶/۱۴ — ۱۰:۰۰</div>
+              </div>
+            </div>
+          </div>
+          <div class="helper" style="margin-top:10px;">QR شامل یک Token امن و یک‌بارمصرف برای Check-in است — نه یوزرنیم/رمز خام. رمز عبور فقط داخل متن کارت (برای ورود دستی در صورت خرابی اسکنر) چاپ می‌شود و در دیتابیس همیشه Hash می‌شود.</div>
+        </main>
+      </div>
+    </section>
+
+    <!-- MERGED: Live Monitor + Exam Attempts -> one "جلسات امتحان" screen with tabs -->
+    <section class="screen" id="sessions">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="sessions" data-user="لر|لیلا رحیمی|Lab Manager"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">جلسات و لابراتوار / <b>جلسات امتحان</b></div><h2>جلسات امتحان — Batch A</h2></div></div>
+          <div class="tabs">
+            <div class="tab on">فعال (۱۸)</div><div class="tab">قطع‌شده (۲)</div><div class="tab">تکمیل‌شده (۱۰۴)</div>
+          </div>
+          <div class="card">
+            <table>
+              <tr><th>Attempt</th><th>متقاضی</th><th>کامپیوتر</th><th>سوال جاری</th><th>باقیمانده</th><th>آخرین فعالیت</th><th>وضعیت</th><th></th></tr>
+              <tr><td>#4468</td><td>احمد ولی (KND001)</td><td>LAB2-14</td><td>۲۱ / ۵۰</td><td>۳۸:۱۲</td><td>۲ ثانیه پیش</td><td><span class="badge on">فعال</span></td><td></td></tr>
+              <tr><td>#4470</td><td>مریم رضایی (KND002)</td><td>LAB2-15</td><td>۷ / ۵۰</td><td>۵۲:۴۰</td><td>۵ ثانیه پیش</td><td><span class="badge on">فعال</span></td><td></td></tr>
+              <tr><td>#4471</td><td>سمیع الله نظری (KND003)</td><td>LAB2-16</td><td>۱۲ / ۵۰</td><td>۴۴:۰۵</td><td>۳ دقیقه پیش</td><td><span class="badge bad">قطع اتصال</span></td><td><button class="btn btn-outline" style="padding:5px 10px;font-size:11.5px;">انتقال Session</button></td></tr>
+              <tr><td>#4455</td><td>جاوید کریمی (KND005)</td><td>LAB2-17</td><td>۵۰ / ۵۰</td><td>۰۰:۰۰</td><td>تکمیل‌شده</td><td><span class="badge off">Submit شده</span></td><td></td></tr>
+            </table>
+          </div>
+          <div class="helper" style="margin-top:10px;">در صورت قطع طولانی یا خرابی سخت‌افزار، از «انتقال Session» استفاده کنید — پاسخ‌ها و زمان باقیمانده حفظ می‌شود.</div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="labs">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="labs" data-user="لر|لیلا رحیمی|Lab Manager"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">جلسات و لابراتوار / <b>لابراتوارها</b></div><h2>لابراتوارها و کامپیوترها</h2></div><button class="btn btn-outline">+ افزودن لابراتوار</button></div>
+          <div class="lab-grid">
+            <div class="lab-card">
+              <div class="lab-head"><b>لابراتوار ۱</b><span class="badge on">۱۸ آنلاین</span></div>
+              <div class="pc-grid">
+                <div class="pc-tile exam">۰۱</div><div class="pc-tile exam">۰۲</div><div class="pc-tile exam">۰۳</div><div class="pc-tile online">۰۴</div><div class="pc-tile online">۰۵</div><div class="pc-tile offline">۰۶</div>
+                <div class="pc-tile exam">۰۷</div><div class="pc-tile exam">۰۸</div><div class="pc-tile maint">۰۹</div><div class="pc-tile online">۱۰</div><div class="pc-tile exam">۱۱</div><div class="pc-tile exam">۱۲</div>
+              </div>
+              <div class="legend"><span><i style="background:#3C9C74;"></i>آزاد</span><span><i style="background:var(--gold);"></i>در امتحان</span><span><i style="background:#C4574A;"></i>آفلاین</span><span><i style="background:#8B8F98;"></i>تعمیراتی</span></div>
+            </div>
+            <div class="lab-card">
+              <div class="lab-head"><b>لابراتوار ۲</b><span class="badge bad">۱ قطع اتصال</span></div>
+              <div class="pc-grid">
+                <div class="pc-tile exam">۱۳</div><div class="pc-tile exam">۱۴</div><div class="pc-tile exam">۱۵</div><div class="pc-tile offline">۱۶</div><div class="pc-tile exam">۱۷</div><div class="pc-tile online">۱۸</div>
+                <div class="pc-tile online">۱۹</div><div class="pc-tile exam">۲۰</div><div class="pc-tile exam">۲۱</div><div class="pc-tile online">۲۲</div><div class="pc-tile online">۲۳</div><div class="pc-tile maint">۲۴</div>
+              </div>
+              <div class="legend"><span><i style="background:#3C9C74;"></i>آزاد</span><span><i style="background:var(--gold);"></i>در امتحان</span><span><i style="background:#C4574A;"></i>آفلاین</span><span><i style="background:#8B8F98;"></i>تعمیراتی</span></div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:16px;">
+            <div style="font-weight:700;margin-bottom:10px;font-size:13px;">جزئیات کامپیوتر — LAB2-16</div>
+            <div class="row" style="font-size:12.5px;">
+              <div>Hostname: <b>lab2-pc16</b></div><div>IP: <b>10.10.2.16</b></div><div>MAC: <b>3C:97:0E:AA:11:02</b></div><div>OS: <b>Windows 11</b></div>
+            </div>
+            <div class="row" style="font-size:12.5px;margin-top:8px;">
+              <div>Browser: <b>Chrome 128</b></div><div>Agent Version: <b>v1.4.2</b></div><div>Last Seen: <b>۳ دقیقه پیش</b></div><div>وضعیت: <span class="badge bad">Offline</span></div>
+            </div>
+            <div style="margin-top:10px;"><button class="btn btn-outline" style="padding:5px 10px;font-size:11.5px;">انتقال Session</button></div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- SHIFT MANAGEMENT -->
+    <section class="screen" id="shifts">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="shifts" data-user="لر|لیلا رحیمی|Lab Manager"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">جلسات و لابراتوار / <b>شفت‌ها</b></div><h2>مدیریت شفت‌ها — Batch B</h2></div><button class="btn btn-outline">+ افزودن شفت</button></div>
+          <div class="card">
+            <table>
+              <tr><th>شفت</th><th>زمان</th><th>لابراتوار</th><th>ظرفیت</th><th>تخصیص‌یافته</th></tr>
+              <tr><td>شفت ۱</td><td>۰۸:۰۰ – ۰۹:۰۰</td><td>لابراتوار ۱</td><td>۳۰</td><td>۳۰ / ۳۰</td></tr>
+              <tr><td>شفت ۲</td><td>۱۰:۰۰ – ۱۱:۰۰</td><td>لابراتوار ۲</td><td>۲۵</td><td>۱۸ / ۲۵</td></tr>
+              <tr><td>شفت ۳</td><td>۱۳:۰۰ – ۱۴:۰۰</td><td>لابراتوار ۱</td><td>۳۰</td><td>۰ / ۳۰</td></tr>
+            </table>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- AUTO-ASSIGN -->
+    <section class="screen" id="auto-assign">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="labs" data-user="لر|لیلا رحیمی|Lab Manager"></aside>
+        <main class="app-main" style="max-width:640px;">
+          <div class="app-topbar"><div><div class="crumb">جلسات و لابراتوار / <b>Auto-Assign</b></div><h2>تخصیص خودکار متقاضیان به کامپیوتر</h2></div></div>
+          <div class="card">
+            <div class="row"><div class="field"><label>شفت</label><select><option>شفت ۲ — ۱۰:۰۰ صبح</option></select></div><div class="field"><label>لابراتوار</label><select><option>لابراتوار ۲</option></select></div></div>
+            <button class="btn btn-primary">اجرای تخصیص خودکار</button>
+            <div class="section-title">پیش‌نمایش نتیجه</div>
+            <table>
+              <tr><th>متقاضی</th><th>کامپیوتر تخصیص‌یافته</th></tr>
+              <tr><td>Candidate 001 — KND001</td><td>LAB2-PC01</td></tr>
+              <tr><td>Candidate 002 — KND002</td><td>LAB2-PC02</td></tr>
+              <tr><td>Candidate 003 — KND003</td><td>LAB2-PC03</td></tr>
+            </table>
+            <div class="helper">در صورت نیاز، پیش از تأیید نهایی می‌توانید تخصیص هر ردیف را به‌صورت دستی اصلاح کنید.</div>
+            <div style="margin-top:12px;"><button class="btn btn-teal">تأیید و ثبت تخصیص</button></div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- SESSION TRANSFER FORM -->
+    <section class="screen" id="transfer-form">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="sessions" data-user="لر|لیلا رحیمی|Lab Manager"></aside>
+        <main class="app-main" style="max-width:520px;">
+          <div class="app-topbar"><div><div class="crumb">جلسات / <b>انتقال Session</b></div><h2>انتقال Session — Attempt #4471</h2></div></div>
+          <div class="card">
+            <div class="stepper">
+              <div class="step done">Lock کامپیوتر قدیم</div><div class="step-arrow">←</div>
+              <div class="step cur">ثبت انتقال</div><div class="step-arrow">←</div>
+              <div class="step">Resume در کامپیوتر جدید</div>
+            </div>
+            <div class="row"><div class="field"><label>از کامپیوتر</label><input value="LAB2-PC16" readonly></div><div class="field"><label>به کامپیوتر</label><select><option>LAB2-PC22 (آزاد)</option><option>LAB1-PC05 (آزاد)</option></select></div></div>
+            <div class="field"><label>دلیل انتقال</label><select><option>خرابی کامپیوتر</option><option>قطعی برق</option><option>قطعی شبکهٔ طولانی</option><option>سایر (توضیح دهید)</option></select></div>
+            <div class="field"><label>توضیحات</label><textarea rows="2" placeholder="در صورت انتخاب «سایر»، توضیح دهید"></textarea></div>
+            <div class="helper" style="margin-bottom:12px;">زمان باقیمانده (۴۴:۰۵) و تمام ۱۲ پاسخ ثبت‌شده بدون تغییر به کامپیوتر جدید منتقل می‌شود. این عملیات در Audit Log با نام شما، زمان، و دلیل ثبت خواهد شد.</div>
+            <button class="btn btn-teal">تأیید و انتقال</button>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- INCIDENT MANAGEMENT -->
+    <section class="screen" id="incidents">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="incidents" data-user="لر|لیلا رحیمی|Lab Manager"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">جلسات و لابراتوار / <b>حوادث</b></div><h2>مدیریت حوادث امتحان</h2></div><button class="btn btn-outline">+ ثبت حادثهٔ جدید</button></div>
+          <div class="card">
+            <table>
+              <tr><th>#</th><th>متقاضی</th><th>کامپیوتر</th><th>مشکل</th><th>اقدام</th><th>مسئول</th><th>زمان</th></tr>
+              <tr><td>#102</td><td>سمیع الله نظری (KND003)</td><td>LAB2-PC16</td><td>خاموشی کامپیوتر</td><td>انتقال Session</td><td>لیلا رحیمی</td><td>۱۰:۱۸</td></tr>
+              <tr><td>#101</td><td>—</td><td>لابراتوار ۱</td><td>قطعی برق ۲ دقیقه‌ای</td><td>ادامهٔ خودکار پس از بازگشت برق</td><td>لیلا رحیمی</td><td>۰۹:۳۰</td></tr>
+            </table>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- MANUAL OVERRIDE -->
+    <section class="screen" id="override">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="override" data-user="ای|ایمل صافی|Exam Administrator"></aside>
+        <main class="app-main" style="max-width:560px;">
+          <div class="app-topbar"><div><div class="crumb">جلسات و لابراتوار / <b>Manual Override</b></div><h2>Manual Override — Attempt #4471</h2></div></div>
+          <div class="card">
+            <div class="helper" style="margin-bottom:16px;">هر عملیات Override نیازمند Permission است و همراه با دلیل در Audit Log ثبت می‌شود.</div>
+            <div class="row" style="margin-bottom:12px;">
+              <button class="btn btn-outline">تمدید زمان</button>
+              <button class="btn btn-outline">Reset Session</button>
+              <button class="btn btn-outline">تغییر کامپیوتر</button>
+            </div>
+            <div class="row" style="margin-bottom:16px;">
+              <button class="btn btn-outline">Force Submit</button>
+              <button class="btn btn-outline">بازگشایی Attempt</button>
+              <button class="btn btn-danger">باطل‌کردن Attempt</button>
+            </div>
+            <div class="section-title" style="margin-top:0;">تمدید زمان +۱۰ دقیقه</div>
+            <div class="field"><label>دلیل</label><select><option>قطعی برق</option><option>مشکل فنی کامپیوتر</option><option>سایر</option></select></div>
+            <button class="btn btn-primary">تأیید تمدید</button>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="results">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="results" data-user="سن|سارا نظری|Reviewer"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">نتایج / <b>نتایج آزمون</b></div><h2>نتایج — Batch A</h2></div><div style="display:flex;gap:8px;"><button class="btn btn-outline">خروجی Excel</button><button class="btn btn-outline">خروجی PDF</button></div></div>
+          <div class="grid-4" style="margin-bottom:16px;">
+            <div class="stat" style="--stat-c:var(--navy-3);"><div class="num">۲۰</div><div class="lbl">مجموع متقاضیان</div></div>
+            <div class="stat" style="--stat-c:var(--gold);"><div class="num">۷۶٪</div><div class="lbl">میانگین نمرات</div></div>
+            <div class="stat" style="--stat-c:var(--teal);"><div class="num">۱۷</div><div class="lbl">قبول</div></div>
+            <div class="stat" style="--stat-c:var(--red);"><div class="num">۳</div><div class="lbl">مردود</div></div>
+          </div>
+          <div class="card">
+            <table>
+              <tr><th>متقاضی</th><th>درست</th><th>غلط</th><th>بی‌پاسخ</th><th>نمره</th><th>نتیجه</th><th></th></tr>
+              <tr><td>جاوید کریمی</td><td>۴۲</td><td>۶</td><td>۲</td><td>۸۴/۱۰۰</td><td><span class="badge on">قبول</span></td><td><a class="btn-ghost">مشاهدهٔ جزئیات</a></td></tr>
+              <tr><td>احمد ولی</td><td>۳۸</td><td>۹</td><td>۳</td><td>۷۶/۱۰۰</td><td><span class="badge on">قبول</span></td><td><a class="btn-ghost">مشاهدهٔ جزئیات</a></td></tr>
+              <tr><td>سمیع الله نظری</td><td>۲۹</td><td>۱۵</td><td>۶</td><td>۵۸/۱۰۰</td><td><span class="badge bad">مردود</span></td><td><a class="btn-ghost">مشاهدهٔ جزئیات</a></td></tr>
+            </table>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="drilldown">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="results" data-user="سن|سارا نظری|Reviewer"></aside>
+        <main class="app-main" style="max-width:700px;">
+          <div class="app-topbar"><div><div class="crumb">نتایج / <b>احمد ولی</b></div><h2>نتیجهٔ متقاضی — احمد ولی (KND001)</h2></div><div class="stat" style="--stat-c:var(--teal);text-align:center;padding:10px 20px;"><div class="num">۷۶٪</div><div class="lbl">نمرهٔ کلی</div></div></div>
+          <div class="card" style="margin-bottom:16px;">
+            <div class="section-title" style="margin-top:0;">نمره بر اساس بخش</div>
+            <div class="bars">
+              <div class="bar-row"><div class="bl">Grammar</div><div class="bar-track"><div class="bar-fill" style="width:80%;"><span>۱۶/۲۰</span></div></div></div>
+              <div class="bar-row"><div class="bl">Vocabulary</div><div class="bar-track"><div class="bar-fill" style="width:80%;"><span>۸/۱۰</span></div></div></div>
+              <div class="bar-row"><div class="bl">Reading</div><div class="bar-track"><div class="bar-fill" style="width:70%;"><span>۷/۱۰</span></div></div></div>
+              <div class="bar-row"><div class="bl">Listening</div><div class="bar-track"><div class="bar-fill" style="width:70%;"><span>۷/۱۰</span></div></div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="section-title" style="margin-top:0;">پاسخ‌های تفصیلی — Grammar (با زمان صرف‌شده)</div>
+            <div class="qwrap"><span class="qn">سوال ۱</span><span style="flex:1;">She _____ to university every day.</span><span style="color:var(--ink-soft);font-size:11px;">۱۲ ثانیه</span><span class="ok" style="margin-inline-start:12px;">✓</span></div>
+            <div class="qwrap"><span class="qn">سوال ۲</span><span style="flex:1;">Choose the correct preposition.</span><span style="color:var(--ink-soft);font-size:11px;">۴۳ ثانیه</span><span class="no" style="margin-inline-start:12px;">✗</span></div>
+            <div class="qwrap"><span class="qn">سوال ۳</span><span style="flex:1;">Identify the correct tense.</span><span style="color:var(--ink-soft);font-size:11px;">۱ دقیقه ۲۱ ثانیه</span><span class="ok" style="margin-inline-start:12px;">✓</span></div>
+            <div class="helper" style="margin-top:8px;">میانگین زمان هر سوال: ۳۲ ثانیه · طولانی‌ترین: سوال ۳ · سریع‌ترین: سوال ۱</div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="stats">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="results" data-user="وا|وحید امینی|Report Viewer"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">نتایج / <b>گزارش آماری</b></div><h2>گزارش آماری — Batch A</h2></div><button class="btn btn-outline">خروجی PDF</button></div>
+          <div class="grid-4" style="margin-bottom:16px;">
+            <div class="stat" style="--stat-c:var(--navy-3);"><div class="num">۱۲۴</div><div class="lbl">مجموع متقاضیان</div></div>
+            <div class="stat" style="--stat-c:var(--teal);"><div class="num">۷۷٫۴٪</div><div class="lbl">نرخ قبولی</div></div>
+            <div class="stat" style="--stat-c:var(--gold);"><div class="num">۷۲٫۳</div><div class="lbl">میانگین نمرات</div></div>
+            <div class="stat" style="--stat-c:var(--amber);"><div class="num">۹۶ / ۳۸</div><div class="lbl">بالاترین / پایین‌ترین</div></div>
+          </div>
+          <div class="card" style="margin-bottom:16px;">
+            <div class="section-title" style="margin-top:0;">میانگین نمره بر اساس بخش</div>
+            <div class="bars">
+              <div class="bar-row"><div class="bl">Grammar</div><div class="bar-track"><div class="bar-fill" style="width:82%;"><span>۸۲٪</span></div></div></div>
+              <div class="bar-row"><div class="bl">Vocabulary</div><div class="bar-track"><div class="bar-fill" style="width:75%;"><span>۷۵٪</span></div></div></div>
+              <div class="bar-row"><div class="bl">Reading</div><div class="bar-track"><div class="bar-fill" style="width:68%;"><span>۶۸٪</span></div></div></div>
+              <div class="bar-row"><div class="bl">Listening</div><div class="bar-track"><div class="bar-fill" style="width:61%;"><span>۶۱٪</span></div></div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="section-title" style="margin-top:0;">Question Analytics — تحلیل سوالات</div>
+            <table>
+              <tr><th>سوال</th><th>درست</th><th>غلط</th><th>بی‌پاسخ</th><th>تحلیل</th></tr>
+              <tr><td>#145 — Present Perfect usage</td><td>۲۸٪</td><td>۶۵٪</td><td>۷٪</td><td><span class="badge bad">بیش‌ازحد دشوار</span></td></tr>
+              <tr><td>#032 — Basic Vocabulary</td><td>۹۶٪</td><td>۳٪</td><td>۱٪</td><td><span class="badge on">آسان</span></td></tr>
+              <tr><td>#078 — Listening Q4</td><td>۴۱٪</td><td>۳۸٪</td><td>۲۱٪</td><td><span class="badge pending">بی‌پاسخ زیاد</span></td></tr>
+            </table>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="users">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="users" data-user="ای|ایمل صافی|Super Admin"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">کاربران / <b>کاربران سیستم</b></div><h2>کاربران سیستم (Staff)</h2></div><button class="btn btn-gold">+ افزودن کاربر جدید</button></div>
+          <div class="card">
+            <table>
+              <tr><th>نام</th><th>یوزرنیم</th><th>نقش</th><th>آخرین ورود</th><th>وضعیت</th><th></th></tr>
+              <tr><td>ایمل صافی</td><td>e.safi</td><td><span class="badge on">Super Admin</span></td><td>امروز ۰۹:۱۲</td><td><span class="badge on">فعال</span></td><td><a class="btn-ghost">ویرایش</a></td></tr>
+              <tr><td>لیلا رحیمی</td><td>l.rahimi</td><td><span class="badge pending">Lab Manager</span></td><td>امروز ۰۸:۰۲</td><td><span class="badge on">فعال</span></td><td><a class="btn-ghost">ویرایش</a></td></tr>
+              <tr><td>کریم یوسفی</td><td>k.yousefi</td><td><span class="badge off">Question Manager</span></td><td>دیروز ۱۶:۴۰</td><td><span class="badge on">فعال</span></td><td><a class="btn-ghost">ویرایش</a></td></tr>
+              <tr><td>سارا نظری</td><td>s.nazari</td><td><span class="badge off">Reviewer</span></td><td>۳ روز پیش</td><td><span class="badge on">فعال</span></td><td><a class="btn-ghost">ویرایش</a></td></tr>
+              <tr><td>وحید امینی</td><td>v.amini</td><td><span class="badge off">Report Viewer</span></td><td>۲ هفته پیش</td><td><span class="badge off">غیرفعال</span></td><td><a class="btn-ghost">ویرایش</a></td></tr>
+            </table>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="roles">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="roles" data-user="ای|ایمل صافی|Super Admin"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">کاربران / <b>ویرایش نقش</b></div><h2>نقش: Lab Manager</h2></div><button class="btn btn-primary">ذخیرهٔ تغییرات</button></div>
+          <div class="card">
+            <div class="field" style="max-width:320px;"><label>نام نقش</label><input value="Lab Manager"></div>
+            <div class="section-title">ماتریس دسترسی‌ها</div>
+            <table class="perm-table">
+              <tr><th>ماژول</th><th>مشاهده</th><th>ایجاد</th><th>ویرایش</th><th>حذف</th></tr>
+              <tr><td>آزمون‌ها</td><td><span class="chk on">✓</span></td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td></tr>
+              <tr><td>بانک سوالات</td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td></tr>
+              <tr><td>متقاضیان</td><td><span class="chk on">✓</span></td><td><span class="chk on">✓</span></td><td><span class="chk on">✓</span></td><td><span class="chk"></span></td></tr>
+              <tr><td>جلسات امتحان</td><td><span class="chk on">✓</span></td><td><span class="chk"></span></td><td><span class="chk on">✓</span></td><td><span class="chk"></span></td></tr>
+              <tr><td>لابراتوارها</td><td><span class="chk on">✓</span></td><td><span class="chk on">✓</span></td><td><span class="chk on">✓</span></td><td><span class="chk"></span></td></tr>
+              <tr><td>نتایج و گزارش‌ها</td><td><span class="chk on">✓</span></td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td></tr>
+              <tr><td>کاربران و نقش‌ها</td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td></tr>
+              <tr><td>تنظیمات سیستم</td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td><td><span class="chk"></span></td></tr>
+            </table>
+            <div class="helper">Super Admin به‌طور پیش‌فرض دسترسی کامل دارد و از این ماتریس مستثنی است.</div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="audit">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="audit" data-user="ای|ایمل صافی|Super Admin"></aside>
+        <main class="app-main">
+          <div class="app-topbar"><div><div class="crumb">نظارت / <b>لاگ فعالیت‌ها</b></div><h2>لاگ فعالیت‌های سیستم</h2></div></div>
+          <div class="card" style="margin-bottom:16px;">
+            <div style="font-weight:700;font-size:13px;margin-bottom:8px;">نمونهٔ باز‌شده — Exam Updated (#9021)</div>
+            <div class="row" style="font-size:12px;color:var(--ink-soft);margin-bottom:6px;">
+              <div>ماژول: <b>Exams</b></div><div>هدف: <b>Batch A</b></div><div>کاربر: <b>Admin — صافی</b></div><div>IP: <b>10.10.1.2</b></div>
+            </div>
+            <div class="diff">Pass Score: <span class="old">۵۰</span> → <span class="new">۶۰</span></div>
+          </div>
+          <div class="card">
+            <table>
+              <tr><th>ID</th><th>زمان</th><th>کاربر</th><th>عملیات</th><th>ماژول</th><th>جزئیات</th><th>IP</th></tr>
+              <tr><td>#9024</td><td>۱۰:۲۴:۰۳</td><td>سمیع الله نظری</td><td>Connection Restored</td><td>Attempts</td><td>Attempt #4471</td><td>10.10.2.16</td></tr>
+              <tr><td>#9023</td><td>۱۰:۱۸:۱۲</td><td>Lab Manager — رحیمی</td><td>Session Transferred</td><td>Sessions</td><td>LAB2-16 → LAB2-22</td><td>10.10.2.5</td></tr>
+              <tr><td>#9021</td><td>۰۹:۵۹:۵۵</td><td>Admin — صافی</td><td>Exam Updated</td><td>Exams</td><td>Pass Score: 50 → 60</td><td>10.10.1.2</td></tr>
+              <tr><td>#9018</td><td>۰۹:۴۵:۰۱</td><td>Admin — صافی</td><td>Candidates Generated</td><td>Candidates</td><td>۲۰ حساب جدید</td><td>10.10.1.2</td></tr>
+            </table>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="anticheat">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="anticheat" data-user="لر|لیلا رحیمی|Lab Manager"></aside>
+        <main class="app-main" style="max-width:640px;">
+          <div class="app-topbar"><div><div class="crumb">نظارت / <b>ضدتقلب</b></div><h2>ضدتقلب — سمیع الله نظری (KND003)</h2></div></div>
+          <div class="card" style="margin-bottom:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div style="font-weight:700;font-size:13px;">Risk Score</div>
+              <div style="font-size:20px;font-weight:800;color:var(--amber);">۷۲ / ۱۰۰</div>
+            </div>
+            <div class="risk-meter"><div class="marker" style="right:28%;"></div></div>
+            <div style="font-size:11px;color:var(--ink-soft);margin-bottom:12px;">🟡 Medium Risk — نیاز به بازبینی دستی</div>
+            <div class="risk-list">
+              <div class="rr"><span>Tab Switch</span><span>۵ ×</span></div>
+              <div class="rr"><span>Fullscreen Exit</span><span>۲ ×</span></div>
+              <div class="rr"><span>Network Loss</span><span>۱ ×</span></div>
+              <div class="rr"><span>Copy/Paste</span><span>۳ ×</span></div>
+              <div class="rr"><span>IP Change</span><span>۰</span></div>
+            </div>
+            <div class="helper" style="margin-top:10px;">Risk Score فقط راهنماست؛ تصمیم نهایی دربارهٔ تقلب همیشه با Reviewer انسانی است.</div>
+          </div>
+          <div class="card">
+            <div class="helper" style="margin-bottom:14px;">این رویدادها به‌عنوان سوابق قابل‌بررسی ثبت شده‌اند؛ یک هشدار به‌تنهایی به‌معنای تقلب قطعی نیست.</div>
+            <div class="warn-item"><span class="ic">⚠</span><span>خروج از حالت Fullscreen</span><span class="tm">۱۰:۲۱:۰۳</span></div>
+            <div class="warn-item"><span class="ic">⚠</span><span>تغییر Tab مرورگر</span><span class="tm">۱۰:۲۲:۱۱</span></div>
+            <div class="warn-item"><span class="ic">⚠</span><span>قطع اتصال شبکه</span><span class="tm">۱۰:۲۳:۴۰</span></div>
+            <div class="warn-item"><span class="ic">⚠</span><span>تلاش Copy از صفحهٔ سوال</span><span class="tm">۱۰:۲۵:۵۵</span></div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- NOTIFICATIONS -->
+    <section class="screen" id="notifications">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="notifications" data-user="ای|ایمل صافی|Super Admin"></aside>
+        <main class="app-main" style="max-width:560px;">
+          <div class="app-topbar"><div><div class="crumb">نظارت / <b>اعلان‌ها</b></div><h2>اعلان‌های سیستم</h2></div></div>
+          <div class="card">
+            <div class="notif-item new"><span class="dotc"></span><span>۳ متقاضی قطع اتصال شدند — Batch A</span><span class="tm">۲ دقیقه پیش</span></div>
+            <div class="notif-item new"><span class="dotc"></span><span>۲ Session با Risk Score بالا شناسایی شد</span><span class="tm">۱۵ دقیقه پیش</span></div>
+            <div class="notif-item"><span class="dotc"></span><span>آزمون Batch A با موفقیت تکمیل شد</span><span class="tm">۱ ساعت پیش</span></div>
+            <div class="notif-item"><span class="dotc"></span><span>Backup روزانه با موفقیت انجام شد</span><span class="tm">امروز ۰۲:۰۰</span></div>
+            <div class="notif-item"><span class="dotc"></span><span>کامپیوتر LAB2-PC16 آفلاین شد</span><span class="tm">دیروز</span></div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="screen" id="settings">
+      <div class="app-shell">
+        <aside class="app-sidebar" data-active="settings" data-user="ای|ایمل صافی|Super Admin"></aside>
+        <main class="app-main" style="max-width:720px;">
+          <div class="app-topbar"><div><div class="crumb">سیستم / <b>تنظیمات</b></div><h2>تنظیمات سیستم</h2></div></div>
+          <div class="tabs">
+            <div class="tab on" data-pane="set-general">عمومی</div>
+            <div class="tab" data-pane="set-exam">تنظیمات امتحان</div>
+            <div class="tab" data-pane="set-security">امنیت</div>
+            <div class="tab" data-pane="set-backup">پشتیبان‌گیری</div>
+          </div>
+
+          <div class="card settings-pane" id="set-general">
+            <div class="section-title" style="margin-top:0;">هویت پوهنتون</div>
+            <div class="row"><div class="field"><label>نام پوهنتون</label><input value="پوهنتون کندز"></div><div class="field"><label>لوگو</label><input value="kunduz-logo.png" readonly></div></div>
+            <div class="row"><div class="field"><label>زبان پیش‌فرض</label><select><option>دری</option><option>پشتو</option><option>English</option></select></div><div class="field"><label>منطقهٔ زمانی</label><select><option>Asia/Kabul (UTC+4:30)</option></select></div></div>
+            <div class="field" style="max-width:260px;"><label>فرمت تاریخ</label><select><option>هجری شمسی</option><option>میلادی</option></select></div>
+            <div style="margin-top:8px;"><button class="btn btn-primary">ذخیرهٔ تنظیمات</button></div>
+          </div>
+
+          <div class="card settings-pane" id="set-exam" style="display:none;">
+            <div class="section-title" style="margin-top:0;">تنظیمات پیش‌فرض امتحان</div>
+            <div class="row"><div class="field"><label>Auto Save</label><input value="فوری — هر پاسخ بلافاصله"></div><div class="field"><label>Session Timeout بی‌فعالیتی</label><input value="۱۵ دقیقه"></div></div>
+            <div class="row"><div class="field"><label>حرکت به سوال قبلی</label><select><option>مجاز</option><option>غیرمجاز</option></select></div><div class="field"><label>Randomize سوالات</label><select><option>فعال</option></select></div><div class="field"><label>Randomize گزینه‌ها</label><select><option>فعال</option></select></div></div>
+            <div class="field" style="max-width:260px;"><label>ارسال خودکار پس از اتمام زمان</label><select><option>فعال (اجباری)</option></select></div>
+            <div class="section-title">Exam Browser Policy</div>
+            <div class="row"><div class="field"><label>مرورگرهای مجاز</label><input value="Chrome (آخرین نسخه), Edge (آخرین نسخه)"></div><div class="field"><label>Fullscreen پیش از شروع</label><select><option>اجباری</option><option>پیشنهادی</option></select></div></div>
+            <div style="margin-top:8px;"><button class="btn btn-primary">ذخیرهٔ تنظیمات</button></div>
+          </div>
+
+          <div class="card settings-pane" id="set-security" style="display:none;">
+            <div class="section-title" style="margin-top:0;">سیاست رمز عبور و ورود</div>
+            <div class="row"><div class="field"><label>حداقل طول رمز عبور</label><input value="۸ کاراکتر"></div><div class="field"><label>پیچیدگی رمز</label><select><option>حروف + عدد + نماد</option></select></div></div>
+            <div class="row"><div class="field"><label>حداکثر تلاش ناموفق ورود</label><input value="۵ بار"></div><div class="field"><label>مدت قفل حساب پس از تلاش ناموفق</label><input value="۱۵ دقیقه"></div></div>
+            <div class="row"><div class="field"><label>Session Timeout پنل ادمین</label><input value="۳۰ دقیقه بی‌فعالیتی"></div><div class="field"><label>احراز هویت دومرحله‌ای (2FA)</label><select><option>اجباری برای Super Admin</option><option>اختیاری</option><option>غیرفعال</option></select></div></div>
+            <div class="field" style="max-width:320px;"><label>محدودیت IP برای ورود ادمین</label><input value="فقط شبکهٔ داخلی پوهنتون (10.10.0.0/16)"></div>
+            <div style="margin-top:8px;"><button class="btn btn-primary">ذخیرهٔ تنظیمات امنیتی</button></div>
+          </div>
+
+          <div class="card settings-pane" id="set-backup" style="display:none;">
+            <div class="section-title" style="margin-top:0;">پشتیبان‌گیری</div>
+            <div class="row" style="margin-bottom:16px;">
+              <div class="stat"><div class="lbl">آخرین پشتیبان</div><div class="num" style="font-size:15px;">۱۴۰۴/۰۶/۱۲ — ۰۲:۰۰</div></div>
+              <div class="stat"><div class="lbl">حجم فایل</div><div class="num" style="font-size:15px;">۱٫۸ GB</div></div>
+              <div class="stat"><div class="lbl">وضعیت</div><div class="num" style="font-size:15px;"><span class="badge on">موفق</span></div></div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+              <button class="btn btn-primary">ایجاد پشتیبان جدید</button>
+              <button class="btn btn-outline">دانلود آخرین پشتیبان</button>
+              <button class="btn btn-outline">بازیابی از پشتیبان</button>
+              <button class="btn btn-danger">حذف پشتیبان‌های قدیمی</button>
+            </div>
+            <div class="section-title">زمان‌بندی خودکار</div>
+            <div class="row"><div class="field"><label>تناوب پشتیبان‌گیری خودکار</label><select><option>روزانه — ساعت ۰۲:۰۰</option><option>هفتگی</option></select></div><div class="field"><label>نگهداری نسخه‌ها</label><input value="۳۰ روز اخیر"></div></div>
+            <table>
+              <tr><th>تاریخ</th><th>حجم</th><th>نوع</th><th>وضعیت</th><th></th></tr>
+              <tr><td>۱۴۰۴/۰۶/۱۲ — ۰۲:۰۰</td><td>۱٫۸ GB</td><td>خودکار (روزانه)</td><td><span class="badge on">موفق</span></td><td><a class="btn-ghost">دانلود</a></td></tr>
+              <tr><td>۱۴۰۴/۰۶/۱۱ — ۰۲:۰۰</td><td>۱٫۷ GB</td><td>خودکار (روزانه)</td><td><span class="badge on">موفق</span></td><td><a class="btn-ghost">دانلود</a></td></tr>
+              <tr><td>۱۴۰۴/۰۶/۱۰ — ۱۸:۴۰</td><td>—</td><td>دستی</td><td><span class="badge bad">ناموفق</span></td><td><a class="btn-ghost">جزئیات خطا</a></td></tr>
+            </table>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- ============ CANDIDATE SCREENS ============ -->
+    <section class="screen" id="c-instr">
+      <div class="cand-shell">
+        <div class="cand-top"><div class="title">English Language Examination</div><div>احمد ولی — KND001</div></div>
+        <div class="cand-center"><div class="cand-card">
+          <div class="row" style="margin-bottom:20px;">
+            <div class="stat" style="text-align:center;--stat-c:var(--gold);"><div class="num">۶۰</div><div class="lbl">دقیقه</div></div>
+            <div class="stat" style="text-align:center;--stat-c:var(--teal);"><div class="num">۵۰</div><div class="lbl">سوال</div></div>
+            <div class="stat" style="text-align:center;--stat-c:var(--navy-3);"><div class="num">۱۰۰</div><div class="lbl">نمره کل</div></div>
+          </div>
+          <div class="section-title" style="margin-top:0;">دستورالعمل مهم</div>
+          <ul style="font-size:13px;line-height:2.1;color:var(--ink-soft);padding-inline-start:20px;margin:0 0 22px;">
+            <li>صفحه را بدون ضرورت Refresh نکنید.</li><li>هر پاسخ به‌صورت خودکار ذخیره می‌شود.</li>
+            <li>در صورت قطع اتصال، پیشرفت شما حفظ و بازیابی می‌شود.</li><li>با اتمام زمان، امتحان به‌صورت خودکار ارسال می‌شود.</li>
+          </ul>
+          <button class="btn btn-teal" style="width:100%;padding:13px;font-size:14px;justify-content:center;">من آماده‌ام — شروع امتحان</button>
+        </div></div>
+      </div>
+    </section>
+
+    <section class="screen" id="c-grammar">
+      <div class="cand-shell">
+        <div class="cand-top"><div class="title">English Language Examination</div><div class="timer-pill">۴۲:۱۸</div></div>
+        <div style="display:flex;flex:1;padding:20px;gap:20px;max-width:1100px;margin:0 auto;width:100%;">
+          <div class="card" style="flex:1;">
+            <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;">Grammar — سوال ۸ از ۵۰</div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:20px;">Choose the correct answer: She _____ to university every day.</div>
+            <div class="opt"><div class="dot"></div>A. go</div><div class="opt sel"><div class="dot"></div>B. goes</div><div class="opt"><div class="dot"></div>C. going</div><div class="opt"><div class="dot"></div>D. gone</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:24px;">
+              <button class="btn btn-outline">سوال قبلی</button>
+              <button class="flagtoggle">🚩 علامت‌گذاری برای بازبینی</button>
+              <button class="btn btn-primary">سوال بعدی</button>
+            </div>
+          </div>
+          <div class="card" style="width:280px;flex:0 0 280px;">
+            <div style="font-size:12.5px;font-weight:700;margin-bottom:10px;">نقشهٔ سوالات</div>
+            <div class="qnav"><div class="done">۱</div><div class="done">۲</div><div class="done flag">۳</div><div class="done">۴</div><div class="done">۵</div><div class="done">۶</div><div class="done">۷</div><div class="cur">۸</div><div>۹</div><div>۱۰</div></div>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:12px;">پاسخ‌داده‌شده: ۷ · علامت‌گذاری‌شده: ۱ 🚩 · باقیمانده: ۴۳</div>
+            <button class="btn btn-danger" style="width:100%;margin-top:16px;justify-content:center;">پایان و ارسال امتحان</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="c-listen">
+      <div class="cand-shell">
+        <div class="cand-top"><div class="title">English Language Examination</div><div class="timer-pill warn">۰۴:۵۰</div></div>
+        <div style="display:flex;flex:1;padding:20px;gap:20px;max-width:1100px;margin:0 auto;width:100%;">
+          <div class="card" style="flex:1;">
+            <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;">Listening — سوال ۳۳ از ۵۰</div>
+            <div class="player" style="margin-bottom:20px;"><div class="btnc">▶</div><div class="track"><i></i></div><div style="font-size:12px;font-variant-numeric:tabular-nums;">۱:۳۲ / ۴:۱۲</div></div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:20px;">What time does the speaker arrive at the office?</div>
+            <div class="opt sel"><div class="dot"></div>A. 7:30 AM</div><div class="opt"><div class="dot"></div>B. 8:00 AM</div><div class="opt"><div class="dot"></div>C. 9:00 AM</div><div class="opt"><div class="dot"></div>D. 9:30 AM</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:24px;">
+              <button class="btn btn-outline">سوال قبلی</button>
+              <button class="flagtoggle">🚩 علامت‌گذاری برای بازبینی</button>
+              <button class="btn btn-primary">سوال بعدی</button>
+            </div>
+          </div>
+          <div class="card" style="width:280px;flex:0 0 280px;">
+            <div style="font-size:12.5px;font-weight:700;margin-bottom:10px;">نقشهٔ سوالات</div>
+            <div class="qnav"><div class="done">۳۱</div><div class="done">۳۲</div><div class="cur">۳۳</div><div>۳۴</div><div>۳۵</div></div>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:12px;">پاسخ‌داده‌شده: ۳۲ · باقیمانده: ۱۸</div>
+            <button class="btn btn-danger" style="width:100%;margin-top:16px;justify-content:center;">پایان و ارسال امتحان</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="c-submit">
+      <div class="cand-shell">
+        <div class="cand-top"><div class="title">English Language Examination</div><div class="timer-pill">۱۲:۰۵</div></div>
+        <div class="cand-center"><div class="cand-card" style="max-width:440px;text-align:center;">
+          <div style="font-weight:800;font-size:16px;margin-bottom:10px;">آیا از ارسال نهایی امتحان مطمئن هستید؟</div>
+          <div style="font-size:13px;color:var(--ink-soft);margin-bottom:22px;">شما به ۴۶ سوال از ۵۰ سوال پاسخ داده‌اید. ۴ سوال بدون پاسخ باقی مانده است.</div>
+          <div style="display:flex;gap:10px;"><button class="btn btn-outline" style="flex:1;justify-content:center;">انصراف</button><button class="btn btn-danger" style="flex:1;justify-content:center;">بلی، ارسال کن</button></div>
+        </div></div>
+      </div>
+    </section>
+
+    <section class="screen" id="c-done">
+      <div class="cand-shell"><div class="cand-center"><div class="cand-card" style="max-width:440px;text-align:center;">
+        <div class="check">✓</div>
+        <div style="font-weight:800;font-size:17px;margin-bottom:8px;">امتحان شما با موفقیت ارسال شد</div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-bottom:24px;">نتیجهٔ شما توسط ادارهٔ پوهنتون بررسی و متعاقباً اعلام خواهد شد.</div>
+        <button class="btn btn-primary" style="width:100%;padding:12px;justify-content:center;">خروج از سیستم</button>
+      </div></div></div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+/* ===== single source of truth for the admin sidebar ===== */
+const ICON = {
+  dash:'<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  doc:'<path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  layers:'<path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="M3 12l9 5 9-5"/>',
+  book:'<path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5"/>',
+  users:'<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="18" cy="8" r="2.4"/><path d="M16 14.3c2.7.4 4.5 2.4 4.5 5.7"/>',
+  upload:'<path d="M12 3v12m0 0-4-4m4 4 4-4M4 19h16"/>',
+  card:'<rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20M7 15h4"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+  lab:'<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  chart:'<path d="M4 20V10M12 20V4M20 20v-7"/>',
+  usercheck:'<path d="M3 3v18h18M7 15l4-5 3 3 5-7"/>',
+  trend:'<path d="M3 3v18h18M7 15l4-5 3 3 5-7"/>',
+  shield:'<path d="M12 2 3 7v6c0 5 4 8 9 9 5-1 9-4 9-9V7l-9-5Z"/>',
+  log:'<path d="M9 2h6l1 3h4v3l-2 12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L4 8V5h4l1-3Z"/>',
+  alert:'<path d="M12 9v4M12 17h.01M10.3 3.9 2.7 17a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'
+};
+function svg(name){return '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+ICON[name]+'</svg>';}
+
+const NAV = [
+  {group:'اصلی', items:[{id:'dash', label:'داشبورد', icon:'dash'}]},
+  {group:'امتحانات', items:[
+    {id:'exams-list', label:'لیست آزمون‌ها', icon:'doc', pill:'۳'},
+    {id:'exam-create', label:'ایجاد / ویرایش آزمون', icon:'plus'},
+    {id:'pool', label:'Question Pool', icon:'layers'},
+  ]},
+  {group:'بانک سوالات', items:[
+    {id:'questions', label:'همهٔ سوالات', icon:'book', pill:'۸۶'},
+    {id:'q-approval', label:'تأیید سوالات (Approval)', icon:'shield'},
+  ]},
+  {group:'متقاضیان', items:[
+    {id:'candidates', label:'همهٔ متقاضیان', icon:'users', pill:'۱۲۴'},
+    {id:'checkin', label:'Check-in و تأیید هویت', icon:'usercheck'},
+    {id:'import', label:'Import از Excel', icon:'upload'},
+    {id:'cards', label:'کارت‌های ورود', icon:'card'},
+  ]},
+  {group:'جلسات و لابراتوار', items:[
+    {id:'sessions', label:'جلسات امتحان', icon:'clock', pill:'۱۸'},
+    {id:'labs', label:'لابراتوارها و کامپیوترها', icon:'lab'},
+    {id:'shifts', label:'شفت‌ها', icon:'clock'},
+    {id:'incidents', label:'حوادث امتحان', icon:'alert'},
+    {id:'override', label:'Manual Override', icon:'shield'},
+  ]},
+  {group:'نتایج', items:[
+    {id:'results', label:'نتایج آزمون', icon:'chart'},
+    {id:'stats', label:'گزارش آماری', icon:'trend'},
+  ]},
+  {group:'کاربران و نظارت', items:[
+    {id:'users', label:'کاربران سیستم', icon:'users', pill:'۶'},
+    {id:'roles', label:'نقش‌ها و دسترسی‌ها', icon:'shield'},
+    {id:'audit', label:'لاگ فعالیت‌ها', icon:'log'},
+    {id:'anticheat', label:'رویدادهای ضدتقلب', icon:'alert'},
+    {id:'notifications', label:'اعلان‌ها', icon:'alert'},
+  ]},
+  {group:'سیستم', items:[{id:'settings', label:'تنظیمات', icon:'gear'}]},
+];
+
+function renderSidebar(aside){
+  const active = aside.dataset.active;
+  const [initials,name,role] = aside.dataset.user.split('|');
+  let html = '<div class="sb-brand"><div class="sb-crest">ک</div><div class="sb-brand-txt"><div class="t1">پوهنتون کندز</div><div class="t2">سیستم امتحان زبان</div></div></div>';
+  html += '<div class="sb-search">'+svg('users').replace('width="17" height="17"','width="15" height="15"')+'<input placeholder="جستجو..."></div>';
+  html += '<nav class="app-nav">';
+  NAV.forEach(g=>{
+    const hasActive = g.items.some(it=>it.id===active);
+    html += '<div class="nav-group'+(hasActive?' has-active':'')+'">';
+    html += '<div class="grp">'+g.group+'</div>';
+    html += '<button type="button" class="grp-btn">'+g.group+'<span class="chev">▾</span></button>';
+    html += '<div class="grp-items">';
+    g.items.forEach(it=>{
+      const on = (it.id===active) ? ' on' : '';
+      const pill = it.pill ? '<span class="pill">'+it.pill+'</span>' : '';
+      html += '<a class="'+on.trim()+'">'+svg(it.icon)+it.label+pill+'</a>';
+    });
+    html += '</div></div>';
+  });
+  html += '</nav>';
+  html += '<div class="sb-foot"><div class="sb-user"><div class="av">'+initials+'</div><div><div class="nm">'+name+'</div><div class="rl">'+role+'</div></div></div></div>';
+  aside.innerHTML = html;
+}
+document.querySelectorAll('.app-sidebar[data-active]').forEach(renderSidebar);
+
+/* ===== top-navbar grouped dropdown behavior ===== */
+document.addEventListener('click', (e)=>{
+  const btn = e.target.closest('.grp-btn');
+  document.querySelectorAll('.nav-group.open').forEach(g=>{
+    if(!btn || g !== btn.closest('.nav-group')) g.classList.remove('open');
+  });
+  if(btn) btn.closest('.nav-group').classList.toggle('open');
+});
+
+/* ===== pseudo-QR pattern for entry cards (visual placeholder for a real secure-token QR) ===== */
+function paintQR(el){
+  let seed = 0;
+  for(const ch of el.id) seed += ch.charCodeAt(0);
+  let cells = '';
+  for(let i=0;i<64;i++){
+    seed = (seed*9301+49297) % 233280;
+    const on = (seed/233280) > 0.42;
+    // keep the three finder-pattern corners solid, like a real QR code
+    const r = Math.floor(i/8), c = i%8;
+    const inCorner = (r<3&&c<3)||(r<3&&c>4)||(r>4&&c<3);
+    cells += '<i class="'+(inCorner || on ? '' : 'off')+'"></i>';
+  }
+  el.innerHTML = cells;
+}
+document.querySelectorAll('.qr-box').forEach(paintQR);
+
+/* ===== settings tabs ===== */
+document.querySelectorAll('#settings .tab').forEach(tabEl=>{
+  tabEl.addEventListener('click', ()=>{
+    document.querySelectorAll('#settings .tab').forEach(t=>t.classList.remove('on'));
+    document.querySelectorAll('#settings .settings-pane').forEach(p=>p.style.display='none');
+    tabEl.classList.add('on');
+    document.getElementById(tabEl.dataset.pane).style.display='block';
+  });
+});
+
+/* ===== mark for review toggle ===== */
+document.querySelectorAll('.flagtoggle').forEach(btn=>{
+  btn.addEventListener('click', ()=>btn.classList.toggle('on'));
+});
+
+/* ===== screen switcher ===== */
+document.querySelectorAll('.proto-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.proto-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.target).classList.add('active');
+    document.querySelector('.proto-stage').scrollTop = 0;
+  });
+});
+
+/* ===== layout toggles ===== */
+const layoutToggle = document.getElementById('toggle-layout');
+const collapseToggle = document.getElementById('toggle-collapse');
+layoutToggle.addEventListener('click', ()=>{
+  document.body.classList.toggle('layout-top');
+  layoutToggle.classList.toggle('active');
+  if(document.body.classList.contains('layout-top')){
+    document.body.classList.remove('sb-collapsed');
+    collapseToggle.classList.remove('active');
+  }
+});
+collapseToggle.addEventListener('click', ()=>{
+  document.body.classList.toggle('sb-collapsed');
+  collapseToggle.classList.toggle('active');
+  if(document.body.classList.contains('sb-collapsed')){
+    document.body.classList.remove('layout-top');
+    layoutToggle.classList.remove('active');
+  }
+});
+</script>
+</body>
+</html>

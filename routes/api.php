@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AntiCheatController;
 use App\Http\Controllers\Api\V1\AttemptController;
 use App\Http\Controllers\Api\V1\CandidateController;
 use App\Http\Controllers\Api\V1\ComputerController;
+use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\ExamController;
 use App\Http\Controllers\Api\V1\LabController;
 use App\Http\Controllers\Api\V1\PingController;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\ResultController;
 use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\ManualOverrideController;
+use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SessionTransferController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\AuditLogController;
@@ -21,6 +23,8 @@ use App\Http\Controllers\Api\V1\FacultyController;
 use App\Http\Controllers\Api\V1\SubjectController;
 use App\Http\Controllers\Api\V1\SubjectAccessController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\MediaController;
+use App\Http\Controllers\Api\V1\PassageController;
 use App\Http\Controllers\Api\V1\SettingController;
 use App\Http\Controllers\Api\V1\BackupController;
 
@@ -29,6 +33,7 @@ use App\Http\Controllers\Api\V1\BackupController;
 
 Route::prefix("v1")->group(function () {
     Route::get("ping", [PingController::class, "ping"]);
+    Route::get("media/{media}/stream", [MediaController::class, "stream"]);
 
     // ─── Auth ──────────────────────────────────────────────────
     Route::prefix("auth")->group(function () {
@@ -54,7 +59,7 @@ Route::prefix("v1")->group(function () {
     Route::middleware("auth:admin")
         ->prefix("admin")
         ->group(function () {
-            Route::get("dashboard-stats", [PingController::class, "stub"]);
+            Route::get("dashboard-stats", [DashboardController::class, "stats"]);
             Route::middleware("role:Super Admin,Exam Administrator")->get(
                 "test-role",
                 [PingController::class, "stub"],
@@ -68,6 +73,12 @@ Route::prefix("v1")->group(function () {
                 "stub",
             ]);
 
+
+            // ─── Exam Sessions Monitoring ────────────────────────
+            Route::get('sessions', [AttemptController::class, 'adminIndex']);
+
+            // ─── Role & Permission Matrix ──────────────────────────
+            Route::get('roles', [RoleController::class, 'index']);
 
             // ─── User Management ───────────────────────────────────
             // بند 3 SRS — فقط Super Admin
@@ -123,6 +134,10 @@ Route::prefix("v1")->group(function () {
                 Route::patch("/{question}/status", [QuestionController::class, "changeStatus"]);
                 Route::get("/{question}/versions", [QuestionController::class, "versions"]);
             });
+
+            // ─── Listening Media & Reading Passages ────────────────
+            Route::post('media', [MediaController::class, 'store']);
+            Route::apiResource('passages', PassageController::class);
 
             // ─── Candidate Management ──────────────────────────────
             Route::prefix("candidates")->group(function () {

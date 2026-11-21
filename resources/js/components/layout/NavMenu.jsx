@@ -3,11 +3,10 @@ import { Link, useLocation } from 'react-router-dom';
 import { cx } from '../../lib/cx.js';
 import useDismiss from '../../hooks/useDismiss.js';
 import { findActiveItem } from '../../config/navigation.js';
+import { Icon } from '../ui/index.js';
 
-// Desktop menu (lg and up). Groups are disclosure buttons (aria-expanded), not ARIA menus.
-// No overflow on <nav> or its parents, otherwise the absolute panels would be clipped.
 const ITEM_BASE =
-  'inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-[9px] text-[12.5px] transition-colors hover:bg-white/[.07] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold xl:px-[13px]';
+  'inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-[9px] text-[12.5px] font-sans transition-colors hover:bg-white/[.07] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold xl:px-[13px]';
 const ACTIVE = 'font-bold text-white shadow-[inset_0_-2px_0_#B08A3E]';
 const IDLE = 'text-nav-ink';
 
@@ -18,24 +17,36 @@ function NavGroup({ entry, activeItemId, open, onToggle, onClose }) {
   const hasActive = entry.items.some((item) => item.id === activeItemId);
 
   return (
-    <div ref={boxRef} className="relative">
+    <div ref={boxRef} className="relative nav-group">
       <button
         ref={buttonRef}
         type="button"
         aria-expanded={open}
         onClick={onToggle}
-        className={cx(ITEM_BASE, 'cursor-pointer', hasActive ? ACTIVE : IDLE, open && 'bg-white/[.09] text-white')}
+        className={cx(
+          ITEM_BASE,
+          'grp-btn cursor-pointer',
+          hasActive ? ACTIVE : IDLE,
+          open && 'bg-white/[.09] text-white'
+        )}
       >
-        {entry.label}
+        <span>{entry.label}</span>
         <span
           aria-hidden="true"
-          className={cx('inline-block text-[9px] opacity-60 transition-transform duration-100', open && 'rotate-180')}
+          className={cx(
+            'chev inline-block text-[9px] opacity-60 transition-transform duration-100',
+            open && 'rotate-180'
+          )}
         >
           {'\u25BE'}
         </span>
       </button>
+
       {open ? (
-        <div className="absolute start-0 top-[calc(100%+6px)] z-[60] min-w-[230px] rounded-xl border border-white/[.12] bg-navy-2 p-2 shadow-[0_16px_34px_rgba(0,0,0,.4)]">
+        <div
+          className="grp-items absolute start-0 top-[calc(100%+6px)] z-[60] flex min-w-[240px] flex-col gap-0.5 rounded-xl border border-white/[.12] bg-[#1E3057] p-2 shadow-[0_16px_34px_rgba(0,0,0,.4)] text-right"
+          dir="rtl"
+        >
           {entry.items.map((item) => {
             const isActive = item.id === activeItemId;
             return (
@@ -45,11 +56,26 @@ function NavGroup({ entry, activeItemId, open, onToggle, onClose }) {
                 onClick={onClose}
                 aria-current={isActive ? 'page' : undefined}
                 className={cx(
-                  'block rounded-lg px-3 py-2 text-xs transition-colors hover:bg-white/[.07] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold',
-                  isActive ? 'bg-white/15 font-bold text-white' : 'font-normal text-nav-ink',
+                  'flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[12.5px] transition-colors',
+                  isActive
+                    ? 'bg-[#B08A3E]/20 font-semibold text-white'
+                    : 'text-[#AEB8D2] hover:bg-white/[.06] hover:text-white'
                 )}
               >
-                {item.label}
+                {item.icon ? (
+                  <Icon name={item.icon} size={16} className="opacity-85 shrink-0" />
+                ) : null}
+                <span className="flex-1 truncate">{item.label}</span>
+                {item.pill ? (
+                  <span
+                    className={cx(
+                      'pill text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0',
+                      isActive ? 'bg-[#B08A3E] text-[#1B1608]' : 'bg-white/10 text-[#DCE2EE]'
+                    )}
+                  >
+                    {item.pill}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
@@ -69,7 +95,7 @@ export default function NavMenu({ entries, label, className }) {
   }, [pathname]);
 
   return (
-    <nav aria-label={label} className={cx('items-center gap-0.5', className)}>
+    <nav aria-label={label} className={cx('app-nav items-center gap-0.5', className)}>
       {entries.map((entry) => {
         if (entry.type === 'group') {
           return (
@@ -91,7 +117,18 @@ export default function NavMenu({ entries, label, className }) {
             aria-current={isActive ? 'page' : undefined}
             className={cx(ITEM_BASE, isActive ? ACTIVE : IDLE)}
           >
-            {entry.label}
+            {entry.icon ? <Icon name={entry.icon} size={16} className="opacity-85 shrink-0" /> : null}
+            <span>{entry.label}</span>
+            {entry.pill ? (
+              <span
+                className={cx(
+                  'pill text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 mr-1',
+                  isActive ? 'bg-[#B08A3E] text-[#1B1608]' : 'bg-white/10 text-[#DCE2EE]'
+                )}
+              >
+                {entry.pill}
+              </span>
+            ) : null}
           </Link>
         );
       })}

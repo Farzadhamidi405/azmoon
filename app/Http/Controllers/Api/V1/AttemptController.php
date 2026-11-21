@@ -8,8 +8,10 @@ use App\Models\Attempt;
 use App\Models\AttemptAnswer;
 use App\Models\CandidateAssignment;
 use App\Models\Computer;
+use App\Models\Exam;
 use App\Models\ExamSnapshot;
 use App\Models\Shift;
+use App\Services\ExamSnapshotService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +34,32 @@ class AttemptController extends Controller
     private const SNAPSHOT_CHANGED_MARKER = '__ATTEMPT_SNAPSHOT_CHANGED__';
 
     /**
+     * لیست جلسات آزمون برای مانیتورینگ زنده ادمین و ناظران.
+     */
+    public function adminIndex(Request $request): JsonResponse
+    {
+        $user = $request->user('admin');
+        if (!$user || !$user->hasPermission('sessions.view')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'شما مجوز مشاهده جلسات آزمون را ندارید.',
+            ], 403);
+        }
+
+        $query = Attempt::with(['candidate:id,name,candidate_code', 'exam:id,title', 'computer:id,computer_code'])
+            ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
+            ->when($request->filled('exam_id'), fn($q) => $q->where('exam_id', $request->exam_id))
+            ->latest('id');
+
+        $attempts = $query->paginate(min(max((int) ($request->per_page ?? 25), 1), 100));
+
+        return response()->json([
+            'success' => true,
+            'data'    => $attempts,
+        ]);
+    }
+
+    /**
      * شروع آزمون جدید یا بازیابی آزمون ناتمام (Resume).
      */
     public function start(Request $request): JsonResponse
@@ -43,7 +71,7 @@ class AttemptController extends Controller
             // ۱. خواندن اسنپ‌شات اولیه خارج از تراکنش
             $snapshotAssignment = CandidateAssignment::with(['exam', 'computer', 'shift'])
                 ->where('candidate_id', $candidate->id)
-                ->whereHas('exam', fn ($q) => $q->where('status', 'published'))
+                ->whereHas('exam', fn ($q) => $q->whereIn('status', ['published', 'running']))
                 ->latest()
                 ->first();
 
@@ -51,7 +79,7 @@ class AttemptController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'هیچ آزمون فعالی برای شما یافت نشد.',
-                ], 404);
+                ], 422);
             }
 
             $snapshotAssignmentId = (int) $snapshotAssignment->id;
@@ -74,6 +102,14 @@ class AttemptController extends Controller
             $examSnapshot = ExamSnapshot::where('exam_id', $snapshotExamId)
                 ->latest('created_at')
                 ->first();
+
+            // بازیابی یا ساخت خودکار اسنپ‌شات در صورت عدم وجود جهت جلوگیری از خطای ۵۰۰
+            if (!$examSnapshot && $snapshotExamId) {
+                $examToSnap = Exam::find($snapshotExamId);
+                if ($examToSnap) {
+                    $examSnapshot = app(ExamSnapshotService::class)->findOrCreateSnapshot($examToSnap);
+                }
+            }
 
             try {
                 $outcome = DB::transaction(function () use (
@@ -107,7 +143,7 @@ class AttemptController extends Controller
                     $lockedAssignment = $lockedCandidateAssignments->firstWhere('id', $snapshotAssignmentId);
 
                     $latestPublishedAssignmentId = CandidateAssignment::where('candidate_id', $candidate->id)
-                        ->whereHas('exam', fn ($q) => $q->where('status', 'published'))
+                        ->whereHas('exam', fn ($q) => $q->whereIn('status', ['published', 'running']))
                         ->latest()
                         ->lockForUpdate()
                         ->value('id');
@@ -151,7 +187,7 @@ class AttemptController extends Controller
                         || $latestPublishedAssignmentId === null
                         || (int) $latestPublishedAssignmentId !== $snapshotAssignmentId
                         || !$lockedAssignment->exam
-                        || $lockedAssignment->exam->status !== 'published'
+                        || !in_array($lockedAssignment->exam->status, ['published', 'running'], true)
                         || (int) $lockedAssignment->exam_id !== $snapshotExamId
                         || ($lockedAssignment->shift_id ? (int) $lockedAssignment->shift_id : null) !== $snapshotShiftId
                         || ($lockedAssignment->computer_id ? (int) $lockedAssignment->computer_id : null) !== $snapshotAssignedComputerId
@@ -297,6 +333,30 @@ class AttemptController extends Controller
             'success' => false,
             'message' => 'به دلیل تغییرات هم‌زمان روی اطلاعات صندلی یا آزمون، شروع جلسه انجام نشد. لطفاً مجدداً تلاش کنید.',
         ], 409);
+    }
+
+    /**
+     * دریافت وضعیت جاری جلسه آزمون داوطلب (State).
+     * شامل اطلاعات زمان باقیمانده، سوالات، و پاسخ‌های ثبت‌شده داوطلب.
+     */
+    public function state(Request $request, Attempt $attempt): JsonResponse
+    {
+        $candidate = auth('candidate')->user();
+
+        if ($attempt->candidate_id !== $candidate->id) {
+            return response()->json(['success' => false, 'message' => 'دسترسی غیرمجاز.'], 403);
+        }
+
+        if ($attempt->isExpired() && in_array($attempt->status, ['in_progress', 'disconnected'], true)) {
+            $this->autoSubmit($attempt);
+            return response()->json([
+                'success' => false,
+                'message' => 'زمان آزمون شما به پایان رسیده و آزمون به‌صورت خودکار ثبت شد.',
+                'status'  => 'auto_submitted',
+            ], 422);
+        }
+
+        return $this->buildAttemptResponse($attempt, true);
     }
 
     /**
@@ -803,6 +863,23 @@ class AttemptController extends Controller
                 ->get()
             : collect();
 
+        // پالایش امنیتی: حذف کامل کلیدهای پاسخ صحیح (is_correct) از گزینه‌های سوال
+        $sanitizedQuestions = $questions->map(function ($q) {
+            $options = $q->options_snapshot ?? [];
+            if (is_array($options)) {
+                $sanitized = array_map(function ($opt) {
+                    if (is_array($opt)) {
+                        unset($opt['is_correct'], $opt['isCorrect']);
+                    } elseif (is_object($opt)) {
+                        unset($opt->is_correct, $opt->isCorrect);
+                    }
+                    return $opt;
+                }, $options);
+                $q->options_snapshot = $sanitized;
+            }
+            return $q;
+        });
+
         $answers = $attempt->answers()
             ->select([
                 'exam_snapshot_question_id',
@@ -841,7 +918,7 @@ class AttemptController extends Controller
                     'session_token'     => $attempt->session_token,
                     'is_resume'         => $isResume,
                 ],
-                'questions'   => $questions,
+                'questions'   => $sanitizedQuestions,
                 'answers'     => $answers,
             ],
         ]);

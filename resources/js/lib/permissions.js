@@ -77,6 +77,9 @@ export function canChangeQuestionStatus(user, question) {
   if (hasRole(user, ROLES.REVIEWER)) return question.status === 'under_review';
   return false;
 }
+export function canApproveQuestions(user) {
+  return hasRole(user, ROLES.SUPER_ADMIN, ROLES.EXAM_ADMIN, ROLES.REVIEWER);
+}
 export function canDeleteQuestion(user) {
   return isFullAccess(user);
 }

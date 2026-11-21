@@ -37,10 +37,16 @@ class CandidateController extends Controller
     public function index(): JsonResponse
     {
         $candidates = Candidate::query()
+            ->with([
+                'latestAssignment.exam:id,title',
+                'latestAssignment.shift:id,name',
+            ])
             ->when(request('search'), fn($q, $s) =>
-                $q->where('name', 'like', "%{$s}%")
-                  ->orWhere('candidate_code', 'like', "%{$s}%")
-                  ->orWhere('username', 'like', "%{$s}%")
+                $q->where(function ($sub) use ($s) {
+                    $sub->where('name', 'like', "%{$s}%")
+                        ->orWhere('candidate_code', 'like', "%{$s}%")
+                        ->orWhere('username', 'like', "%{$s}%");
+                })
             )
             ->when(request('status'), fn($q, $s) =>
                 $q->where('status', $s)

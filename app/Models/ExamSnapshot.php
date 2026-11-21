@@ -55,12 +55,11 @@ class ExamSnapshot extends Model
 
     /**
      * Attempt هایی که از این Snapshot استفاده می‌کنند.
-     * TODO: فعال می‌شود بعد از ساخت Attempt Model در Stage 6.2
      */
-    // public function attempts(): HasMany
-    // {
-    //     return $this->hasMany(Attempt::class, 'exam_snapshot_id');
-    // }
+    public function attempts(): HasMany
+    {
+        return $this->hasMany(Attempt::class, 'exam_snapshot_id');
+    }
 
     // ─── Helper Methods ──────────────────────────────────────
 

@@ -250,6 +250,43 @@ export default function LabsPage() {
         actions={canCreate ? <Button onClick={openCreate}>{TEXT.add}</Button> : null}
       />
 
+      {/* Prototyped Visual Lab Grid & PC Monitors */}
+      <div className="lab-grid grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div className="lab-card card p-4">
+          <div className="lab-head flex justify-between items-center mb-3">
+            <b className="text-navy text-[13.5px]">لابراتوار ۱</b>
+            <span className="badge on text-[11px]">۱۸ آنلاین</span>
+          </div>
+          <div className="pc-grid grid grid-cols-6 gap-1.5">
+            <div className="pc-tile exam">۰۱</div><div className="pc-tile exam">۰۲</div><div className="pc-tile exam">۰۳</div><div className="pc-tile online">۰۴</div><div className="pc-tile online">۰۵</div><div className="pc-tile offline">۰۶</div>
+            <div className="pc-tile exam">۰۷</div><div className="pc-tile exam">۰۸</div><div className="pc-tile maint">۰۹</div><div className="pc-tile online">۱۰</div><div className="pc-tile exam">۱۱</div><div className="pc-tile exam">۱۲</div>
+          </div>
+          <div className="legend flex gap-3 text-[11px] text-ink-soft mt-3 flex-wrap">
+            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-[#3C9C74] inline-block"></i>آزاد</span>
+            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-gold inline-block"></i>در امتحان</span>
+            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-[#C4574A] inline-block"></i>آفلاین</span>
+            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-[#8B8F98] inline-block"></i>تعمیراتی</span>
+          </div>
+        </div>
+
+        <div className="lab-card card p-4">
+          <div className="lab-head flex justify-between items-center mb-3">
+            <b className="text-navy text-[13.5px]">لابراتوار ۲</b>
+            <span className="badge bad text-[11px]">۱ قطع اتصال</span>
+          </div>
+          <div className="pc-grid grid grid-cols-6 gap-1.5">
+            <div className="pc-tile exam">۱۳</div><div className="pc-tile exam">۱۴</div><div className="pc-tile exam">۱۵</div><div className="pc-tile offline">۱۶</div><div className="pc-tile exam">۱۷</div><div className="pc-tile online">۱۸</div>
+            <div className="pc-tile online">۱۹</div><div className="pc-tile exam">۲۰</div><div className="pc-tile exam">۲۱</div><div className="pc-tile online">۲۲</div><div className="pc-tile online">۲۳</div><div className="pc-tile maint">۲۴</div>
+          </div>
+          <div className="legend flex gap-3 text-[11px] text-ink-soft mt-3 flex-wrap">
+            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-[#3C9C74] inline-block"></i>آزاد</span>
+            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-gold inline-block"></i>در امتحان</span>
+            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-[#C4574A] inline-block"></i>آفلاین</span>
+            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-[#8B8F98] inline-block"></i>تعمیراتی</span>
+          </div>
+        </div>
+      </div>
+
       <FilterBar
         onSubmit={(e) => {
           if (e && e.preventDefault) e.preventDefault();

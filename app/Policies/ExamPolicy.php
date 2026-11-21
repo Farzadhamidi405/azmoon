@@ -115,15 +115,16 @@ class ExamPolicy
      */
     public function changeStatus(User $user, Exam $exam): bool
     {
-        // فقط Super Admin و Exam Administrator
-        return in_array($user->role?->name, [
-            'Super Admin',
-            'Exam Administrator',
-        ]);
+        // Super Admin و Exam Administrator به تمام انتقال‌ها دسترسی دارند
+        if (in_array($user->role?->name, ['Super Admin', 'Exam Administrator'])) {
+            return true;
+        }
 
+        // طراح آزمون (Question Manager) فقط مجاز است آزمون خود را از draft به under_review بفرستد
+        if ($exam->status === 'draft' && $exam->created_by === $user->id) {
+            return $user->hasSubjectAccess($exam->subject_id);
+        }
 
-        
-
-        
+        return false;
     }
 }
