@@ -117,11 +117,46 @@ class ExamController extends Controller
     }
 
     /**
+     * تضمین وجود جدول واسط exam_questions قبل از هرگونه عملیات پایگاه داده.
+     * اگر به هر دلیلی مایگریشن در MySQL اجرا نشده باشد، این متد خودکار جدول را می‌سازد.
+     */
+    private function ensureExamQuestionsTableExists(): void
+    {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('exam_questions')) {
+            \Illuminate\Support\Facades\Schema::create('exam_questions', function (\Illuminate\Database\Schema\Blueprint $table) {
+                $table->id();
+
+                $table->foreignId('exam_id')
+                    ->constrained('exams')
+                    ->cascadeOnDelete();
+
+                $table->foreignId('question_id')
+                    ->constrained('questions')
+                    ->cascadeOnDelete();
+
+                $table->foreignId('exam_section_id')
+                    ->nullable()
+                    ->constrained('exam_sections')
+                    ->nullOnDelete();
+
+                $table->integer('display_order')->default(1);
+                $table->decimal('score', 5, 2)->nullable();
+
+                $table->timestamps();
+
+                $table->unique(['exam_id', 'question_id']);
+                $table->index(['exam_id', 'display_order']);
+            });
+        }
+    }
+
+    /**
      * نمایش یک آزمون با جزئیات کامل.
      */
     public function show(Exam $exam)
     {
         Gate::authorize('view', $exam);
+        $this->ensureExamQuestionsTableExists();
 
         $exam->load(['subject', 'creator', 'approver', 'sections.questionPool', 'questions.options']);
         $exam->loadCount('questions');
@@ -138,6 +173,7 @@ class ExamController extends Controller
     public function store(Request $request, AuditLogService $audit)
     {
         Gate::authorize('create', Exam::class);
+        $this->ensureExamQuestionsTableExists();
 
         $validated = $request->validate([
             'subject_id'              => ['required', 'exists:subjects,id'],
@@ -202,14 +238,16 @@ class ExamController extends Controller
         $exam = DB::transaction(function () use ($validated, $sections, $questionIds, $audit) {
             $newRecord = Exam::create($validated);
 
+            $createdSections = collect();
             if (!empty($sections)) {
                 foreach ($sections as $index => $sec) {
-                    $newRecord->sections()->create([
+                    $createdSection = $newRecord->sections()->create([
                         'name'           => $sec['name'],
                         'question_count' => (int) $sec['question_count'],
                         'total_marks'    => (float) $sec['total_marks'],
                         'display_order'  => (int) ($sec['display_order'] ?? ($index + 1)),
                     ]);
+                    $createdSections->push($createdSection);
                 }
             }
 
@@ -218,9 +256,14 @@ class ExamController extends Controller
                 $order = 1;
                 $syncData = [];
                 foreach ($validQuestions as $q) {
+                    $matchedSection = $createdSections->first(function ($s) use ($q) {
+                        return mb_strtolower(trim($s->name)) === mb_strtolower(trim($q->section_name ?? ''));
+                    }) ?: $createdSections->first();
+
                     $syncData[$q->id] = [
-                        'display_order' => $order++,
-                        'score'         => $q->score ?? 1.0,
+                        'exam_section_id' => $matchedSection?->id,
+                        'display_order'   => $order++,
+                        'score'           => $q->score ?? 1.0,
                     ];
                 }
                 $newRecord->questions()->sync($syncData);
@@ -245,6 +288,7 @@ class ExamController extends Controller
     public function update(Request $request, Exam $exam, AuditLogService $audit)
     {
         Gate::authorize('update', $exam);
+        $this->ensureExamQuestionsTableExists();
 
         $validated = $request->validate([
             'title'                   => ['sometimes', 'string', 'max:255'],
@@ -325,13 +369,19 @@ class ExamController extends Controller
             }
 
             if ($questionIds !== null) {
+                $examSections = $exam->sections()->get();
                 $validQuestions = \App\Models\Question::whereIn('id', $questionIds)->get();
                 $order = 1;
                 $syncData = [];
                 foreach ($validQuestions as $q) {
+                    $matchedSection = $examSections->first(function ($s) use ($q) {
+                        return mb_strtolower(trim($s->name)) === mb_strtolower(trim($q->section_name ?? ''));
+                    }) ?: $examSections->first();
+
                     $syncData[$q->id] = [
-                        'display_order' => $order++,
-                        'score'         => $q->score ?? 1.0,
+                        'exam_section_id' => $matchedSection?->id,
+                        'display_order'   => $order++,
+                        'score'           => $q->score ?? 1.0,
                     ];
                 }
                 $exam->questions()->sync($syncData);
@@ -491,6 +541,7 @@ class ExamController extends Controller
     public function getQuestions(Exam $exam): \Illuminate\Http\JsonResponse
     {
         Gate::authorize('view', $exam);
+        $this->ensureExamQuestionsTableExists();
 
         $questions = $exam->questions()
             ->with(['options', 'passage', 'media'])
@@ -514,6 +565,7 @@ class ExamController extends Controller
     public function getAvailableQuestions(Request $request, Exam $exam): \Illuminate\Http\JsonResponse
     {
         Gate::authorize('view', $exam);
+        $this->ensureExamQuestionsTableExists();
 
         $currentQuestionIds = $exam->questions()->pluck('questions.id')->toArray();
 
@@ -548,6 +600,7 @@ class ExamController extends Controller
     public function syncQuestions(Request $request, Exam $exam, AuditLogService $audit): \Illuminate\Http\JsonResponse
     {
         Gate::authorize('update', $exam);
+        $this->ensureExamQuestionsTableExists();
 
         if (in_array($exam->status, ['running', 'completed', 'archived'])) {
             return response()->json([
@@ -582,15 +635,21 @@ class ExamController extends Controller
         $syncData = [];
         $order = 1;
         $totalCalculatedScore = 0.0;
+        $examSections = $exam->sections()->get();
 
         foreach ($questionIds as $qId) {
             $qModel = $validQuestions->firstWhere('id', $qId);
             $qScore = isset($scores[$qId]) ? (float) $scores[$qId] : (float) ($qModel->score ?? 1.0);
             $totalCalculatedScore += $qScore;
 
+            $matchedSection = $examSections->first(function ($s) use ($qModel) {
+                return mb_strtolower(trim($s->name)) === mb_strtolower(trim($qModel->section_name ?? ''));
+            }) ?: $examSections->first();
+
             $syncData[$qId] = [
-                'display_order' => $order++,
-                'score'         => $qScore,
+                'exam_section_id' => $matchedSection?->id,
+                'display_order'   => $order++,
+                'score'           => $qScore,
             ];
         }
 
