@@ -12,7 +12,8 @@ class AssignCandidateRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->hasPermission('candidates.update');
+        $user = $this->user('admin') ?? $this->user();
+        return (bool) $user?->hasPermission('candidates.update');
     }
 
     public function rules(): array

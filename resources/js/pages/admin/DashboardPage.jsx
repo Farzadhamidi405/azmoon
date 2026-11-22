@@ -150,7 +150,7 @@ export default function DashboardPage() {
               </Link>
             </div>
             <div>
-              <Link to="/admin/cards" className="hover:text-navy hover:underline">
+              <Link to="/admin/candidates/cards" className="hover:text-navy hover:underline">
                 • کارت‌های ورود چاپ شد
               </Link>
             </div>

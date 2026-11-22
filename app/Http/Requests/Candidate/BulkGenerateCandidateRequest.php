@@ -12,7 +12,8 @@ class BulkGenerateCandidateRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->hasPermission('candidates.create');
+        $user = $this->user('admin') ?? $this->user();
+        return (bool) $user?->hasPermission('candidates.create');
     }
 
     public function rules(): array

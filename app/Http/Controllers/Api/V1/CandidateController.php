@@ -36,7 +36,7 @@ class CandidateController extends Controller
      */
     public function index(): JsonResponse
     {
-        $candidates = Candidate::query()
+        $query = Candidate::query()
             ->with([
                 'latestAssignment.exam:id,title',
                 'latestAssignment.shift:id,name',
@@ -51,12 +51,25 @@ class CandidateController extends Controller
             ->when(request('status'), fn($q, $s) =>
                 $q->where('status', $s)
             )
-            ->orderBy('created_at', 'desc')
+            ->when(request('exam_id'), fn($q, $examId) =>
+                $q->whereHas('assignments', fn($aq) => $aq->where('exam_id', $examId))
+            );
+
+        $stats = [
+            'total'       => Candidate::count(),
+            'present'     => Candidate::where('status', 'present')->count(),
+            'absent'      => Candidate::where('status', 'absent')->count(),
+            'in_progress' => Candidate::where('status', 'in_progress')->count(),
+            'completed'   => Candidate::where('status', 'completed')->count(),
+        ];
+
+        $candidates = $query->orderBy('created_at', 'desc')
             ->paginate(request('per_page', 20));
 
         return response()->json([
             'success' => true,
             'data'    => $candidates,
+            'stats'   => $stats,
         ]);
     }
 
@@ -106,7 +119,14 @@ class CandidateController extends Controller
      */
     public function show(Candidate $candidate): JsonResponse
     {
-        $candidate->load(['assignments.exam', 'assignments.shift', 'assignments.lab']);
+        $candidate->load([
+            'assignments.exam:id,title',
+            'assignments.shift:id,name',
+            'assignments.lab:id,name',
+            'assignments.computer:id,computer_code',
+            'attempts.exam:id,title',
+            'entryCards',
+        ]);
 
         return response()->json([
             'success' => true,

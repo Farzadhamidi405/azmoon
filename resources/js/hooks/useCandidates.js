@@ -4,6 +4,7 @@ import api, { API_BASE, unwrapList, unwrapItem } from '../lib/api.js';
 export default function useCandidates(filters = {}) {
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState(null);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -20,6 +21,9 @@ export default function useCandidates(filters = {}) {
         const unwrapped = unwrapList(res.data);
         setItems(unwrapped.items || []);
         setPagination(unwrapped.pagination);
+        if (res.data?.stats) {
+          setStats(res.data.stats);
+        }
       } catch (err) {
         if (err.name !== 'CanceledError' && !api.isCancel?.(err)) {
           setError(err);
@@ -39,6 +43,11 @@ export default function useCandidates(filters = {}) {
 
   const reload = useCallback(() => fetchCandidates(), [fetchCandidates]);
 
+  const get = async (id) => {
+    const res = await api.get(`${API_BASE}/admin/candidates/${id}`);
+    return unwrapItem(res.data);
+  };
+
   const create = async (data) => {
     const res = await api.post(`${API_BASE}/admin/candidates`, data);
     reload();
@@ -47,6 +56,12 @@ export default function useCandidates(filters = {}) {
 
   const update = async (id, data) => {
     const res = await api.put(`${API_BASE}/admin/candidates/${id}`, data);
+    reload();
+    return unwrapItem(res.data);
+  };
+
+  const toggleStatus = async (id, newStatus) => {
+    const res = await api.put(`${API_BASE}/admin/candidates/${id}`, { status: newStatus });
     reload();
     return unwrapItem(res.data);
   };
@@ -76,11 +91,14 @@ export default function useCandidates(filters = {}) {
   return {
     items,
     pagination,
+    stats,
     loading,
     error,
     reload,
+    get,
     create,
     update,
+    toggleStatus,
     remove,
     bulkGenerate,
     checkIn,
