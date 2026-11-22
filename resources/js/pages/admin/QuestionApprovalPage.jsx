@@ -18,15 +18,18 @@ import formatDate from '../../lib/formatDate.js';
 import QuestionDetailModal from '../../components/questions/QuestionDetailModal.jsx';
 import RejectReasonModal from '../../components/questions/RejectReasonModal.jsx';
 
+// تب‌های گردش کار تأیید سوالات مطابق با SRS
 const STATUS_TABS = [
-  { key: 'under_review', label: 'در انتظار بررسی (Pending)' },
-  { key: 'approved', label: 'تأیید شده (Approved)' },
-  { key: 'rejected', label: 'رد شده (Rejected)' },
-  { key: '', label: 'همه سوالات' },
+  { key: 'under_review', label: 'Under Review (در انتظار تأیید)' },
+  { key: 'draft', label: 'Draft (پیش‌نویس)' },
+  { key: 'approved', label: 'Approved (تأیید شده)' },
+  { key: 'active', label: 'Active (فعال در آزمون‌ها)' },
+  { key: 'inactive', label: 'Inactive (غیرفعال)' },
+  { key: 'archived', label: 'Archived (آرشیو)' },
 ];
 
 const TYPE_OPTIONS = [
-  { value: '', label: 'همه انواع' },
+  { value: '', label: 'همه انواع سوال' },
   { value: 'single', label: 'چهارگزینه‌ای (تک‌پاسخی)' },
   { value: 'multi', label: 'چندگزینه‌ای' },
   { value: 'true_false', label: 'صحیح / غلط' },
@@ -34,18 +37,21 @@ const TYPE_OPTIONS = [
 ];
 
 const STATUS_BADGES = {
-  under_review: { label: 'در انتظار بررسی', tone: 'pending' },
-  approved: { label: 'تأیید شده', tone: 'teal' },
-  rejected: { label: 'رد شده', tone: 'bad' },
-  draft: { label: 'پیش‌نویس', tone: 'off' },
-  active: { label: 'فعال', tone: 'on' },
-  inactive: { label: 'غیرفعال', tone: 'bad' },
-  archived: { label: 'آرشیو', tone: 'off' },
+  under_review: { label: 'Under Review', tone: 'pending' },
+  draft: { label: 'Draft', tone: 'off' },
+  approved: { label: 'Approved', tone: 'teal' },
+  active: { label: 'Active', tone: 'on' },
+  inactive: { label: 'Inactive', tone: 'bad' },
+  archived: { label: 'Archived', tone: 'off' },
 };
 
 export default function QuestionApprovalPage() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const { items: subjects } = useSubjects();
+
+  const isSuperAdmin = hasRole('Super Admin', 'Exam Administrator');
+  const isReviewer = hasRole('Reviewer') || isSuperAdmin;
+  const isQuestionManager = hasRole('Question Manager') || isSuperAdmin;
 
   const [activeTab, setActiveTab] = useState('under_review');
   const [search, setSearch] = useState('');
@@ -54,9 +60,9 @@ export default function QuestionApprovalPage() {
   const [topic, setTopic] = useState('');
   const [page, setPage] = useState(1);
 
-  // واکشی سوالات با فیلترها و وضعیت فعال
-  const { items, pagination, loading, error, reload, changeStatus } = useQuestions({
-    status: activeTab || undefined,
+  // واکشی سوالات بر اساس وضعیت تب جاری و فیلترها
+  const { items, pagination, counts, loading, error, reload, changeStatus } = useQuestions({
+    status: activeTab,
     subject_id: subjectId || undefined,
     question_type: questionType || undefined,
     topic: topic || undefined,
@@ -70,20 +76,18 @@ export default function QuestionApprovalPage() {
   const [actionBusyId, setActionBusyId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
-  // عملیات تأیید سوال (انتقال وضعیت به approved)
+  // تأیید سوال (under_review -> approved)
   const handleApprove = async (question) => {
     if (question.status !== 'under_review') {
-      notifyError('تنها سوالاتی که در انتظار بررسی هستند قابل تأیید می‌باشند.');
+      notifyError('تنها سوالات در انتظار بررسی قابل تأیید هستند.');
       return;
     }
 
     setActionBusyId(question.id);
     try {
       await changeStatus(question.id, 'approved');
-      notifySuccess(`سوال شماره #${question.id} با موفقیت تأیید شد.`);
-      if (detailQuestion?.id === question.id) {
-        setDetailQuestion(null);
-      }
+      notifySuccess(`سوال #${question.id} با موفقیت تأیید شد.`);
+      if (detailQuestion?.id === question.id) setDetailQuestion(null);
       reload();
     } catch (err) {
       const msg = err.response?.data?.message || err.apiMessage || 'خطا در تأیید سوال.';
@@ -93,24 +97,91 @@ export default function QuestionApprovalPage() {
     }
   };
 
-  // عملیات رد سوال (انتقال وضعیت به rejected همراه با دلیل رد)
+  // رد سوال (under_review -> draft) همراه با ثبت دلیل رد در دیتابیس
   const handleRejectConfirm = async (question, reason) => {
     if (question.status !== 'under_review') {
-      notifyError('تنها سوالاتی که در انتظار بررسی هستند قابل رد می‌باشند.');
+      notifyError('تنها سوالات در انتظار بررسی قابل رد هستند.');
       return;
     }
 
     setActionBusyId(question.id);
     try {
-      await changeStatus(question.id, 'rejected', { rejection_reason: reason });
-      notifySuccess(`سوال شماره #${question.id} با موفقیت رد شد و دلیل رد به طراح اعلام گردید.`);
+      await changeStatus(question.id, 'draft', { rejection_reason: reason });
+      notifySuccess(`سوال #${question.id} رد شد و همراه با بازخورد به پیش‌نویس (Draft) طراح بازگردانده شد.`);
       setRejectingQuestion(null);
-      if (detailQuestion?.id === question.id) {
-        setDetailQuestion(null);
-      }
+      if (detailQuestion?.id === question.id) setDetailQuestion(null);
       reload();
     } catch (err) {
-      const msg = err.response?.data?.message || err.apiMessage || 'خطا در ثبت رد سوال.';
+      const msg = err.response?.data?.message || err.apiMessage || 'خطا در رد سوال.';
+      notifyError(msg);
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  // ارسال سوال برای بررسی (draft -> under_review)
+  const handleSubmitForReview = async (question) => {
+    if (question.status !== 'draft') {
+      notifyError('تنها سوالات در وضعیت پیش‌نویس قابل ارسال برای بررسی هستند.');
+      return;
+    }
+
+    setActionBusyId(question.id);
+    try {
+      await changeStatus(question.id, 'under_review');
+      notifySuccess(`سوال #${question.id} برای بررسی (Under Review) ارسال شد.`);
+      if (detailQuestion?.id === question.id) setDetailQuestion(null);
+      reload();
+    } catch (err) {
+      const msg = err.response?.data?.message || err.apiMessage || 'خطا در ارسال سوال برای بررسی.';
+      notifyError(msg);
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  // تغییر وضعیت به فعال (approved -> active یا inactive -> active)
+  const handleActivate = async (question) => {
+    setActionBusyId(question.id);
+    try {
+      await changeStatus(question.id, 'active');
+      notifySuccess(`سوال #${question.id} فعال و آماده استفاده در آزمون‌ها شد.`);
+      if (detailQuestion?.id === question.id) setDetailQuestion(null);
+      reload();
+    } catch (err) {
+      const msg = err.response?.data?.message || err.apiMessage || 'خطا در فعال‌سازی سوال.';
+      notifyError(msg);
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  // تغییر وضعیت به غیرفعال (approved/active -> inactive)
+  const handleDeactivate = async (question) => {
+    setActionBusyId(question.id);
+    try {
+      await changeStatus(question.id, 'inactive');
+      notifySuccess(`سوال #${question.id} غیرفعال شد.`);
+      if (detailQuestion?.id === question.id) setDetailQuestion(null);
+      reload();
+    } catch (err) {
+      const msg = err.response?.data?.message || err.apiMessage || 'خطا در غیرفعال‌سازی سوال.';
+      notifyError(msg);
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  // تغییر وضعیت به بایگانی (active/inactive -> archived)
+  const handleArchive = async (question) => {
+    setActionBusyId(question.id);
+    try {
+      await changeStatus(question.id, 'archived');
+      notifySuccess(`سوال #${question.id} بایگانی شد.`);
+      if (detailQuestion?.id === question.id) setDetailQuestion(null);
+      reload();
+    } catch (err) {
+      const msg = err.response?.data?.message || err.apiMessage || 'خطا در بایگانی سوال.';
       notifyError(msg);
     } finally {
       setActionBusyId(null);
@@ -154,10 +225,10 @@ export default function QuestionApprovalPage() {
                 )}
               </div>
 
-              {/* نمایش دلیل رد در صورت رد شدن سوال */}
+              {/* نمایش بازخورد رد سوال در صورت وجود */}
               {row.rejection_reason && (
-                <div className="mt-1.5 p-2 rounded-lg bg-red/10 border border-red/30 text-red text-[11.5px] leading-relaxed">
-                  <span className="font-bold">دلیل رد: </span>
+                <div className="mt-1.5 p-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-950 text-[11.5px] leading-relaxed">
+                  <span className="font-bold text-amber-900">⚠️ بازخورد بازبین: </span>
                   {row.rejection_reason}
                 </div>
               )}
@@ -248,15 +319,14 @@ export default function QuestionApprovalPage() {
       },
       {
         key: 'actions',
-        header: 'عملیات بررسی',
-        title: 'عملیات بررسی',
+        header: 'عملیات',
+        title: 'عملیات',
         align: 'end',
         actions: true,
         render: (...args) => {
           const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
           const canAction = canChangeQuestionStatus(user, row);
           const isBusy = actionBusyId === row.id;
-          const isUnderReview = row.status === 'under_review';
 
           return (
             <div className="flex items-center justify-end gap-1.5 flex-wrap">
@@ -265,10 +335,11 @@ export default function QuestionApprovalPage() {
                 variant="ghost"
                 onClick={() => setDetailQuestion(row)}
               >
-                مشاهده جزئیات
+                جزئیات
               </Button>
 
-              {canAction && isUnderReview && (
+              {/* اکشن‌های تب Under Review */}
+              {canAction && row.status === 'under_review' && isReviewer && (
                 <>
                   <Button
                     size="sm"
@@ -290,12 +361,101 @@ export default function QuestionApprovalPage() {
                   </Button>
                 </>
               )}
+
+              {/* اکشن‌های تب Draft */}
+              {canAction && row.status === 'draft' && (
+                <Button
+                  size="sm"
+                  variant="teal"
+                  loading={isBusy}
+                  disabled={actionBusyId !== null && !isBusy}
+                  onClick={() => handleSubmitForReview(row)}
+                >
+                  ارسال برای بررسی ↑
+                </Button>
+              )}
+
+              {/* اکشن‌های تب Approved */}
+              {canAction && row.status === 'approved' && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="gold"
+                    loading={isBusy}
+                    disabled={actionBusyId !== null && !isBusy}
+                    onClick={() => handleActivate(row)}
+                  >
+                    فعال در آزمون
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-ink-soft hover:bg-paper"
+                    disabled={actionBusyId !== null}
+                    onClick={() => handleDeactivate(row)}
+                  >
+                    غیرفعال
+                  </Button>
+                </>
+              )}
+
+              {/* اکشن‌های تب Active */}
+              {canAction && row.status === 'active' && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-ink-soft hover:bg-paper"
+                    disabled={actionBusyId !== null}
+                    onClick={() => handleDeactivate(row)}
+                  >
+                    غیرفعال
+                  </Button>
+                  {isSuperAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red hover:bg-red/10"
+                      disabled={actionBusyId !== null}
+                      onClick={() => handleArchive(row)}
+                    >
+                      آرشیو
+                    </Button>
+                  )}
+                </>
+              )}
+
+              {/* اکشن‌های تب Inactive */}
+              {canAction && row.status === 'inactive' && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="gold"
+                    loading={isBusy}
+                    disabled={actionBusyId !== null && !isBusy}
+                    onClick={() => handleActivate(row)}
+                  >
+                    فعال‌سازی مجدد
+                  </Button>
+                  {isSuperAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red hover:bg-red/10"
+                      disabled={actionBusyId !== null}
+                      onClick={() => handleArchive(row)}
+                    >
+                      آرشیو
+                    </Button>
+                  )}
+                </>
+              )}
             </div>
           );
         },
       },
     ],
-    [user, expandedId, actionBusyId]
+    [user, expandedId, actionBusyId, isReviewer, isSuperAdmin]
   );
 
   return (
@@ -310,25 +470,30 @@ export default function QuestionApprovalPage() {
         }
       />
 
-      {/* Stepper راهنمای گردش کار تأیید */}
+      {/* Stepper راهنمای گردش کار تأیید سوال مطابق با SRS */}
       <div className="stepper mb-4">
-        <div className="step done">Draft (طراحی)</div>
-        <div className="step-arrow">←</div>
-        <div className={`step ${activeTab === 'under_review' ? 'cur' : 'done'}`}>
-          Under Review (در انتظار تأیید)
+        <div className={`step ${activeTab === 'draft' ? 'cur' : 'done'}`}>
+          ۱. Draft (طراحی)
         </div>
         <div className="step-arrow">←</div>
-        <div className={`step ${activeTab === 'approved' ? 'cur' : ''}`}>
-          Approved (تأیید شده)
+        <div className={`step ${activeTab === 'under_review' ? 'cur' : activeTab === 'draft' ? '' : 'done'}`}>
+          ۲. Under Review (بررسی)
         </div>
         <div className="step-arrow">←</div>
-        <div className="step">Active در آزمون‌ها</div>
+        <div className={`step ${activeTab === 'approved' ? 'cur' : ['active', 'inactive', 'archived'].includes(activeTab) ? 'done' : ''}`}>
+          ۳. Approved (تأییدشده)
+        </div>
+        <div className="step-arrow">←</div>
+        <div className={`step ${activeTab === 'active' ? 'cur' : ''}`}>
+          ۴. Active (آماده در آزمون)
+        </div>
       </div>
 
-      {/* تب‌های انتخاب وضعیت سوالات */}
+      {/* تب‌های ۶ گانه مستقل با شمارنده تعداد رکوردها */}
       <div className="flex items-center gap-2 mb-3.5 flex-wrap">
         {STATUS_TABS.map((tab) => {
           const isSelected = activeTab === tab.key;
+          const count = counts ? counts[tab.key] ?? 0 : 0;
           return (
             <button
               key={tab.key}
@@ -337,11 +502,18 @@ export default function QuestionApprovalPage() {
                 setActiveTab(tab.key);
                 setPage(1);
               }}
-              className={`badge cursor-pointer transition-colors ${
-                isSelected ? 'on font-bold' : 'off hover:bg-paper'
+              className={`badge cursor-pointer transition-all flex items-center gap-1.5 py-1 px-3 ${
+                isSelected
+                  ? 'on font-bold shadow-xs scale-[1.02]'
+                  : 'off hover:bg-paper'
               }`}
             >
-              {tab.label}
+              <span>{tab.label}</span>
+              <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-mono ${
+                isSelected ? 'bg-panel text-navy font-bold' : 'bg-line-soft text-ink-soft'
+              }`}>
+                {count}
+              </span>
             </button>
           );
         })}
@@ -413,11 +585,15 @@ export default function QuestionApprovalPage() {
             emptyTitle={
               activeTab === 'under_review'
                 ? 'هیچ سوالی در حال حاضر در انتظار بررسی وجود ندارد.'
+                : activeTab === 'draft'
+                ? 'هیچ سوالی در وضعیت پیش‌نویس (Draft) یافت نشد.'
                 : activeTab === 'approved'
                 ? 'هیچ سوال تأییدشده‌ای یافت نشد.'
-                : activeTab === 'rejected'
-                ? 'هیچ سوال ردشده‌ای یافت نشد.'
-                : 'هیچ سوالی با این مشخصات یافت نشد.'
+                : activeTab === 'active'
+                ? 'هیچ سوال فعالی یافت نشد.'
+                : activeTab === 'inactive'
+                ? 'هیچ سوال غیرفعالی یافت نشد.'
+                : 'هیچ سوالی با این مشخصات در این بخش یافت نشد.'
             }
           />
         )}
@@ -434,7 +610,7 @@ export default function QuestionApprovalPage() {
       </div>
 
       <div className="helper mt-3 text-xs text-ink-soft leading-relaxed">
-        فقط سوالات با وضعیت Approved (تأییدشده) می‌توانند در آزمون‌ها انتخاب شده و در Question Pool قرار گیرند.
+        مطابق بندهای سند مشخصات سامانه (SRS)، فقط سوالات با وضعیت Approved یا Active مجاز به ورود به آزمون‌ها و Question Pool هستند. رد سوال توسط بازبین آن را همراه با دلیل به پیش‌نویس بازمی‌گرداند.
       </div>
 
       {/* Modal جزئیات کامل سوال */}
@@ -443,9 +619,9 @@ export default function QuestionApprovalPage() {
         onClose={() => setDetailQuestion(null)}
         question={detailQuestion}
         onApprove={handleApprove}
-        onReject={(q) => {
-          setRejectingQuestion(q);
-        }}
+        onReject={(q) => setRejectingQuestion(q)}
+        onSubmitForReview={handleSubmitForReview}
+        onActivate={handleActivate}
         canAction={canChangeQuestionStatus(user, detailQuestion)}
         busy={actionBusyId !== null}
       />

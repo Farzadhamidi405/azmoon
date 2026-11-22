@@ -4,6 +4,7 @@ import api, { API_BASE, unwrapList, unwrapItem } from '../lib/api.js';
 export default function useQuestions(filters = {}) {
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState(null);
+  const [counts, setCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -22,6 +23,9 @@ export default function useQuestions(filters = {}) {
         let list = [];
         let pag = null;
         if (res.data) {
+          if (res.data.counts) {
+            setCounts(res.data.counts);
+          }
           if (Array.isArray(res.data.data)) {
             list = res.data.data;
           } else if (res.data.data && Array.isArray(res.data.data.data)) {
@@ -106,6 +110,7 @@ export default function useQuestions(filters = {}) {
   return {
     items,
     pagination,
+    counts,
     loading,
     error,
     reload,

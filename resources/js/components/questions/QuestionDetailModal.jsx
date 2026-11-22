@@ -11,13 +11,12 @@ const TYPE_LABELS = {
 };
 
 const STATUS_CONFIG = {
-  under_review: { label: 'در انتظار بررسی', tone: 'pending' },
-  approved: { label: 'تأیید شده', tone: 'teal' },
-  rejected: { label: 'رد شده', tone: 'bad' },
   draft: { label: 'پیش‌نویس (Draft)', tone: 'off' },
-  active: { label: 'فعال', tone: 'on' },
-  inactive: { label: 'غیرفعال', tone: 'bad' },
-  archived: { label: 'آرشیو', tone: 'off' },
+  under_review: { label: 'در انتظار بررسی (Under Review)', tone: 'pending' },
+  approved: { label: 'تأیید شده (Approved)', tone: 'teal' },
+  active: { label: 'فعال در آزمون‌ها (Active)', tone: 'on' },
+  inactive: { label: 'غیرفعال (Inactive)', tone: 'bad' },
+  archived: { label: 'آرشیو (Archived)', tone: 'off' },
 };
 
 export default function QuestionDetailModal({
@@ -26,6 +25,8 @@ export default function QuestionDetailModal({
   question,
   onApprove,
   onReject,
+  onSubmitForReview,
+  onActivate,
   canAction = false,
   busy = false,
 }) {
@@ -36,7 +37,9 @@ export default function QuestionDetailModal({
     tone: 'off',
   };
   const typeLabel = TYPE_LABELS[question.question_type] || question.question_type || 'تک‌پاسخی';
+  const isDraft = question.status === 'draft';
   const isUnderReview = question.status === 'under_review';
+  const isApproved = question.status === 'approved';
 
   return (
     <Modal
@@ -58,12 +61,12 @@ export default function QuestionDetailModal({
           </div>
         </div>
 
-        {/* دلیل رد در صورت وجود */}
+        {/* دلیل رد یا بازخورد قبلی در صورت وجود */}
         {question.rejection_reason && (
-          <div className="p-3.5 rounded-xl border border-red/40 bg-red/10 text-red space-y-1">
-            <div className="font-bold flex items-center gap-1.5 text-[13px]">
+          <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-50/70 text-amber-950 space-y-1">
+            <div className="font-bold flex items-center gap-1.5 text-[12.5px] text-amber-900">
               <span>⚠️</span>
-              <span>دلیل رد سوال:</span>
+              <span>بازخورد بازبین / دلیل رد سوال:</span>
             </div>
             <p className="leading-relaxed whitespace-pre-wrap">{question.rejection_reason}</p>
           </div>
@@ -184,25 +187,50 @@ export default function QuestionDetailModal({
             بستن
           </Button>
 
-          {canAction && isUnderReview && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                className="text-red hover:bg-red/10 border-red/40"
-                onClick={() => onReject(question)}
-                disabled={busy}
-              >
-                رد سوال ✕
-              </Button>
+          <div className="flex items-center gap-2">
+            {/* دکمه ارسال برای بررسی اگر سوال draft باشد */}
+            {canAction && isDraft && (
               <Button
                 variant="teal"
-                onClick={() => onApprove(question)}
+                onClick={() => onSubmitForReview?.(question)}
                 loading={busy}
               >
-                تأیید سوال ✓
+                ارسال برای بررسی (Under Review)
               </Button>
-            </div>
-          )}
+            )}
+
+            {/* دکمه‌های تأیید و رد برای سوالات تحت بررسی */}
+            {canAction && isUnderReview && (
+              <>
+                <Button
+                  variant="outline"
+                  className="text-red hover:bg-red/10 border-red/40"
+                  onClick={() => onReject?.(question)}
+                  disabled={busy}
+                >
+                  رد سوال و بازگشت به پیش‌نویس ✕
+                </Button>
+                <Button
+                  variant="teal"
+                  onClick={() => onApprove?.(question)}
+                  loading={busy}
+                >
+                  تأیید سوال (Approved) ✓
+                </Button>
+              </>
+            )}
+
+            {/* دکمه فعال‌سازی سوال برای آزمون‌ها اگر approved باشد */}
+            {canAction && isApproved && (
+              <Button
+                variant="gold"
+                onClick={() => onActivate?.(question)}
+                loading={busy}
+              >
+                فعال‌سازی در آزمون‌ها (Active)
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </Modal>

@@ -27,7 +27,6 @@ class Question extends Model
         'active',
         'inactive',
         'archived',
-        'rejected',
     ];
 
     const TYPES = [

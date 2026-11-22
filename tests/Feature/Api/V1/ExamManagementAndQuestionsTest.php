@@ -129,7 +129,7 @@ class ExamManagementAndQuestionsTest extends TestCase
         $approvedQ2 = $this->createQuestion($this->subject, 'active');
         $draftQ     = $this->createQuestion($this->subject, 'draft');
         $reviewQ    = $this->createQuestion($this->subject, 'under_review');
-        $rejectedQ  = $this->createQuestion($this->subject, 'rejected');
+        $inactiveQ  = $this->createQuestion($this->subject, 'inactive');
         $otherSubQ  = $this->createQuestion($this->otherSubject, 'approved');
 
         $response = $this->actingAs($this->admin)
@@ -144,7 +144,7 @@ class ExamManagementAndQuestionsTest extends TestCase
         $this->assertContains($approvedQ2->id, $returnedIds);
         $this->assertNotContains($draftQ->id, $returnedIds);
         $this->assertNotContains($reviewQ->id, $returnedIds);
-        $this->assertNotContains($rejectedQ->id, $returnedIds);
+        $this->assertNotContains($inactiveQ->id, $returnedIds);
         $this->assertNotContains($otherSubQ->id, $returnedIds);
     }
 
@@ -195,12 +195,12 @@ class ExamManagementAndQuestionsTest extends TestCase
             'created_by' => $this->admin->id,
         ]);
 
-        $rejectedQ = $this->createQuestion($this->subject, 'rejected');
+        $draftQ = $this->createQuestion($this->subject, 'draft');
         $otherSubQ = $this->createQuestion($this->otherSubject, 'approved');
 
         $res1 = $this->actingAs($this->admin)
             ->postJson("/api/v1/admin/exams/{$exam->id}/questions", [
-                'question_ids' => [$rejectedQ->id],
+                'question_ids' => [$draftQ->id],
             ]);
         $res1->assertStatus(422);
 
@@ -291,15 +291,15 @@ class ExamManagementAndQuestionsTest extends TestCase
         // 2. ارسال به under_review
         $q->update(['status' => 'under_review']);
 
-        // 3. رد با دلیل توسط بازبین
+        // 3. رد با دلیل توسط بازبین (طبق SRS انتقال به draft همراه با دلیل)
         $rejectRes = $this->actingAs($this->admin)
             ->patchJson("/api/v1/admin/questions/{$q->id}/status", [
-                'status' => 'rejected',
+                'status' => 'draft',
                 'rejection_reason' => 'گزینه‌ها ناکافی هستند.',
             ]);
         $rejectRes->assertOk();
         $q->refresh();
-        $this->assertEquals('rejected', $q->status);
+        $this->assertEquals('draft', $q->status);
         $this->assertEquals('گزینه‌ها ناکافی هستند.', $q->rejection_reason);
 
         // 4. ساخت آزمون
@@ -313,7 +313,7 @@ class ExamManagementAndQuestionsTest extends TestCase
             'created_by' => $this->admin->id,
         ]);
 
-        // 5. سوال ردشده نباید قابل انتخاب در آزمون باشد
+        // 5. سوال پیش‌نویس/ردشده نباید قابل انتخاب در آزمون باشد
         $badSync = $this->actingAs($this->admin)
             ->postJson("/api/v1/admin/exams/{$exam->id}/questions", [
                 'question_ids' => [$q->id],

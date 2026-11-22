@@ -40,9 +40,20 @@ class QuestionController extends Controller
 
         $questions = $query->paginate($request->per_page ?? 15);
 
+        // آمار شمارش سوالات بر اساس وضعیت برای تب‌های Approval
+        $counts = [
+            'draft'        => Question::where('status', 'draft')->count(),
+            'under_review' => Question::where('status', 'under_review')->count(),
+            'approved'     => Question::where('status', 'approved')->count(),
+            'active'       => Question::where('status', 'active')->count(),
+            'inactive'     => Question::where('status', 'inactive')->count(),
+            'archived'     => Question::where('status', 'archived')->count(),
+        ];
+
         return response()->json([
             'success' => true,
             'data'    => $questions,
+            'counts'  => $counts,
         ]);
     }
 
@@ -385,7 +396,6 @@ class QuestionController extends Controller
         $request->validate([
             'status' => ['required', Rule::in(Question::STATUSES)],
             'rejection_reason' => [
-                Rule::requiredIf(fn() => $request->status === 'rejected'),
                 'nullable',
                 'string',
                 'max:1000',
@@ -395,11 +405,10 @@ class QuestionController extends Controller
         $newStatus = $request->status;
         $oldStatus = $question->status;
 
-        // انتقال‌های مجاز
+        // انتقال‌های مجاز طبق SRS
         $allowed = [
             'draft'        => ['under_review'],
-            'under_review' => ['draft', 'approved', 'rejected'],
-            'rejected'     => ['draft', 'under_review'],
+            'under_review' => ['draft', 'approved'],
             'approved'     => ['active', 'inactive'],
             'active'       => ['inactive', 'archived'],
             'inactive'     => ['active', 'archived'],
@@ -415,10 +424,12 @@ class QuestionController extends Controller
 
         $updateData = ['status' => $newStatus];
 
-        // ثبت Reviewer و دلیل رد
-        if ($newStatus === 'rejected') {
+        // در صورت رد سوال (under_review -> draft)، ثبت دلیل رد و Reviewer
+        if ($oldStatus === 'under_review' && $newStatus === 'draft') {
             $updateData['reviewed_by'] = Auth::id();
-            $updateData['rejection_reason'] = $request->rejection_reason;
+            if ($request->filled('rejection_reason')) {
+                $updateData['rejection_reason'] = $request->rejection_reason;
+            }
         } elseif ($newStatus === 'approved') {
             $updateData['reviewed_by'] = Auth::id();
             $updateData['rejection_reason'] = null;
@@ -442,7 +453,7 @@ class QuestionController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "وضعیت سوال به «{$newStatus}» تغییر کرد.",
+            'message' => "وضعیت سوال با موفقیت به «{$newStatus}» تغییر کرد.",
             'data'    => $question->fresh(['subject', 'createdBy', 'reviewedBy', 'options', 'passage', 'media']),
         ]);
     }

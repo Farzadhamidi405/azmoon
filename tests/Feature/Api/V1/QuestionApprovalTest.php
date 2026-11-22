@@ -95,7 +95,7 @@ class QuestionApprovalTest extends TestCase
         return $question;
     }
 
-    public function test_can_list_questions_under_review(): void
+    public function test_can_list_questions_under_review_and_counts(): void
     {
         $this->createQuestion('under_review');
         $this->createQuestion('draft');
@@ -105,7 +105,10 @@ class QuestionApprovalTest extends TestCase
             ->getJson('/api/v1/admin/questions?status=under_review');
 
         $response->assertOk()
-            ->assertJsonPath('success', true);
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('counts.under_review', 1)
+            ->assertJsonPath('counts.draft', 1)
+            ->assertJsonPath('counts.approved', 1);
 
         $data = $response->json('data.data');
         $this->assertCount(1, $data);
@@ -130,13 +133,13 @@ class QuestionApprovalTest extends TestCase
         $this->assertNull($question->rejection_reason);
     }
 
-    public function test_reviewer_can_reject_question_with_reason(): void
+    public function test_reviewer_can_reject_question_to_draft_with_reason(): void
     {
         $question = $this->createQuestion('under_review');
 
         $response = $this->actingAs($this->reviewer)
             ->patchJson("/api/v1/admin/questions/{$question->id}/status", [
-                'status' => 'rejected',
+                'status' => 'draft',
                 'rejection_reason' => 'گزینه صحیح به اشتباه علامت‌گذاری شده است.',
             ]);
 
@@ -144,37 +147,39 @@ class QuestionApprovalTest extends TestCase
             ->assertJsonPath('success', true);
 
         $question->refresh();
-        $this->assertEquals('rejected', $question->status);
+        // طبق SRS رد سوال باید وضعیت آن را به draft برگرداند همراه با ثبت دلیل رد
+        $this->assertEquals('draft', $question->status);
         $this->assertEquals($this->reviewer->id, $question->reviewed_by);
         $this->assertEquals('گزینه صحیح به اشتباه علامت‌گذاری شده است.', $question->rejection_reason);
     }
 
-    public function test_rejection_requires_reason(): void
+    public function test_question_manager_can_resubmit_draft_question_for_review(): void
     {
-        $question = $this->createQuestion('under_review');
+        $question = $this->createQuestion('draft');
+        $question->update(['rejection_reason' => 'لطفاً گزینه دوم را اصلاح کنید.']);
 
-        $response = $this->actingAs($this->reviewer)
+        $response = $this->actingAs($this->questionManager)
             ->patchJson("/api/v1/admin/questions/{$question->id}/status", [
-                'status' => 'rejected',
-                'rejection_reason' => '',
+                'status' => 'under_review',
             ]);
 
-        $response->assertStatus(422)
-            ->assertJsonValidationErrors(['rejection_reason']);
+        $response->assertOk();
+        $question->refresh();
+        $this->assertEquals('under_review', $question->status);
     }
 
     public function test_cannot_approve_or_reject_already_approved_question(): void
     {
         $question = $this->createQuestion('approved');
 
-        // بازبین نباید بتواند سوالی که قبلاً تأیید شده را بدون بررسی مجدد تغییر وضعیت دهد
+        // سوال تأییدشده نمی‌تواند مستقیماً بدون بازبینی به پیش‌نویس بازگردد
         $response = $this->actingAs($this->reviewer)
             ->patchJson("/api/v1/admin/questions/{$question->id}/status", [
-                'status' => 'rejected',
-                'rejection_reason' => 'رد نامعتبر',
+                'status' => 'draft',
+                'rejection_reason' => 'انتقال نامعتبر',
             ]);
 
-        $response->assertStatus(403);
+        $response->assertStatus(422);
     }
 
     public function test_unauthorized_user_cannot_approve_questions(): void
@@ -189,25 +194,17 @@ class QuestionApprovalTest extends TestCase
         $response->assertStatus(403);
     }
 
-    public function test_can_filter_approved_and_rejected_questions(): void
+    public function test_can_activate_approved_question(): void
     {
-        $q1 = $this->createQuestion('approved');
-        $q2 = $this->createQuestion('rejected');
-        $q2->update(['rejection_reason' => 'متن سوال نامفهوم است']);
+        $question = $this->createQuestion('approved');
 
-        $resApproved = $this->actingAs($this->reviewer)
-            ->getJson('/api/v1/admin/questions?status=approved');
+        $response = $this->actingAs($this->reviewer)
+            ->patchJson("/api/v1/admin/questions/{$question->id}/status", [
+                'status' => 'active',
+            ]);
 
-        $resApproved->assertOk();
-        $this->assertCount(1, $resApproved->json('data.data'));
-        $this->assertEquals($q1->id, $resApproved->json('data.data.0.id'));
-
-        $resRejected = $this->actingAs($this->reviewer)
-            ->getJson('/api/v1/admin/questions?status=rejected');
-
-        $resRejected->assertOk();
-        $this->assertCount(1, $resRejected->json('data.data'));
-        $this->assertEquals($q2->id, $resRejected->json('data.data.0.id'));
-        $this->assertEquals('متن سوال نامفهوم است', $resRejected->json('data.data.0.rejection_reason'));
+        $response->assertOk();
+        $question->refresh();
+        $this->assertEquals('active', $question->status);
     }
 }

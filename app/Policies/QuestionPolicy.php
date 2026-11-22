@@ -96,7 +96,7 @@ class QuestionPolicy
      *
      * Super Admin / Exam Administrator : هر انتقالی مجاز است.
      * Question Manager : فقط draft → under_review (سوال خودش).
-     * Reviewer : فقط under_review → approved یا under_review → draft (رد).
+     * Reviewer : تحت بررسی (تأیید/رد) و تأییدشده (فعال‌سازی).
      */
     public function changeStatus(User $user, Question $question): bool
     {
@@ -110,7 +110,7 @@ class QuestionPolicy
         }
 
         if ($this->isReviewer($user)) {
-            return $question->status === 'under_review';
+            return in_array($question->status, ['under_review', 'approved']);
         }
 
         return false;
