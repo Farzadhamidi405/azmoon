@@ -412,18 +412,24 @@ class QuestionController extends Controller
         $reviewerId = $user->id;
 
         DB::transaction(function () use ($questions, $reviewerId, $audit, &$approvedCount, &$skippedCount) {
+            $hasReviewedBy = Schema::hasColumn('questions', 'reviewed_by');
             $hasReviewedAt = Schema::hasColumn('questions', 'reviewed_at');
+            $hasRejectionReason = Schema::hasColumn('questions', 'rejection_reason');
 
             foreach ($questions as $question) {
                 if (Gate::allows('changeStatus', $question)) {
                     $previousStatus = (string) $question->status;
                     $updatePayload = [
-                        'status'           => 'approved',
-                        'reviewed_by'      => $reviewerId,
-                        'rejection_reason' => null,
+                        'status' => 'approved',
                     ];
+                    if ($hasReviewedBy) {
+                        $updatePayload['reviewed_by'] = $reviewerId;
+                    }
                     if ($hasReviewedAt) {
                         $updatePayload['reviewed_at'] = now();
+                    }
+                    if ($hasRejectionReason) {
+                        $updatePayload['rejection_reason'] = null;
                     }
 
                     $question->update($updatePayload);
@@ -508,7 +514,9 @@ class QuestionController extends Controller
 
             $updateData = ['status' => $newStatus];
 
+            $hasReviewedBy = Schema::hasColumn('questions', 'reviewed_by');
             $hasReviewedAt = Schema::hasColumn('questions', 'reviewed_at');
+            $hasRejectionReason = Schema::hasColumn('questions', 'rejection_reason');
             $currentUserId = Auth::id() ?: auth('admin')->id();
 
             // در صورت رد سوال (under_review -> draft)، ثبت الزامی دلیل رد و ثبت بازبین
@@ -520,21 +528,31 @@ class QuestionController extends Controller
                     'rejection_reason.min'      => 'دلیل رد سوال باید حداقل ۳ حرف باشد.',
                 ]);
 
-                $updateData['reviewed_by'] = $currentUserId;
+                if ($hasReviewedBy) {
+                    $updateData['reviewed_by'] = $currentUserId;
+                }
                 if ($hasReviewedAt) {
                     $updateData['reviewed_at'] = now();
                 }
-                $updateData['rejection_reason'] = $request->rejection_reason;
+                if ($hasRejectionReason) {
+                    $updateData['rejection_reason'] = $request->rejection_reason;
+                }
             } elseif ($newStatus === 'approved') {
                 // در صورت تأیید سوال (under_review -> approved)، ثبت بازبین و پاکسازی دلیل رد
-                $updateData['reviewed_by'] = $currentUserId;
+                if ($hasReviewedBy) {
+                    $updateData['reviewed_by'] = $currentUserId;
+                }
                 if ($hasReviewedAt) {
                     $updateData['reviewed_at'] = now();
                 }
-                $updateData['rejection_reason'] = null;
+                if ($hasRejectionReason) {
+                    $updateData['rejection_reason'] = null;
+                }
             } elseif ($oldStatus === 'draft' && $newStatus === 'under_review') {
                 // ارسال مجدد سوال برای بررسی — پاکسازی دلیل رد قبلی
-                $updateData['rejection_reason'] = null;
+                if ($hasRejectionReason) {
+                    $updateData['rejection_reason'] = null;
+                }
             }
 
             // وضعیت قبلی، تغییر وضعیت و ثبت audit در یک تراکنش.
