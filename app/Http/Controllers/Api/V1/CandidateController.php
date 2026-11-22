@@ -11,6 +11,10 @@ use App\Http\Requests\Candidate\StoreCandidateRequest;
 use App\Http\Requests\Candidate\UpdateCandidateRequest;
 use App\Models\Candidate;
 use App\Models\CandidateAssignment;
+use App\Models\Exam;
+use App\Models\Shift;
+use App\Models\Lab;
+use App\Models\Computer;
 use App\Models\AuditLog;
 use App\Models\EntryCard;
 use App\Services\CandidateImportService;
@@ -249,42 +253,77 @@ class CandidateController extends Controller
     // ─── Import from Excel ────────────────────────────────────
 
     /**
-     * Import متقاضیان از فایل Excel.
-     * مرحله اول (confirmed=false): فقط Validation و پیش‌نمایش.
-     * مرحله دوم (confirmed=true): ذخیره نهایی بعد از تأیید کاربر.
+     * Import متقاضیان از فایل Excel یا CSV.
+     * مرحله اول (confirmed=false): فقط Validation ساختار، ستون‌ها و پیش‌نمایش بدون ذخیره در دیتابیس.
+     * مرحله دوم (confirmed=true): ذخیره نهایی فقط برای ردیف‌های معتبر درون Database Transaction.
      * بند 12 SRS — Excel Import.
      */
-    public function import(ImportCandidateRequest $request): JsonResponse
+    public function import(ImportCandidateRequest $request, AuditLogService $audit): JsonResponse
     {
-        // خواندن ردیف‌ها از فایل
+        // خواندن و نرمال‌سازی ردیف‌ها از فایل اکسل یا CSV
         $rows = $this->readExcelFile($request->file('file'));
 
-        // مرحله اول: فقط Validation — بدون ذخیره
+        if (empty($rows)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'هیچ ردیف داده‌ای در فایل شناسایی نشد یا فایل فاقد ستون‌های نام / کد ملی است.',
+            ], 422);
+        }
+
+        // مرحله اول: فقط بررسی ساختار و Validation — بدون هیچ ذخیره در پایگاه‌داده
         if (! $request->boolean('confirmed')) {
             $preview = $this->importService->validate($rows);
 
             return response()->json([
                 'success' => true,
-                'message' => 'پیش‌نمایش آماده است. برای تأیید، confirmed=true ارسال کنید.',
+                'message' => 'پیش‌نمایش داده‌های فایل آماده است. برای ذخیره نهایی، درخواست confirmed=true ارسال نمایید.',
                 'data'    => $preview,
             ]);
         }
 
         // مرحله دوم: Import نهایی فقط ردیف‌های معتبر
         $validation = $this->importService->validate($rows);
-        $result     = $this->importService->import(
-            $validation['valid'],
-            $request->input('prefix', 'KND')
+        $validRows  = $validation['valid'];
+
+        if (empty($validRows)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'هیچ رکورد معتبری برای ذخیره در پایگاه‌داده یافت نشد.',
+                'data'    => [
+                    'imported_count'    => 0,
+                    'skipped_invalid'   => $validation['summary']['invalid_count'],
+                    'skipped_duplicate' => $validation['summary']['duplicate_count'],
+                    'errors'            => $validation['errors'],
+                ],
+            ], 422);
+        }
+
+        $prefix = $request->input('prefix', 'KND');
+        $result = $this->importService->import($validRows, $prefix);
+
+        // ثبت audit برای فرآیند ایمپورت
+        $audit->record(
+            'candidates',
+            'Candidate:imported',
+            'Candidate',
+            null,
+            null,
+            [
+                'imported_count'    => count($result),
+                'skipped_invalid'   => $validation['summary']['invalid_count'],
+                'skipped_duplicate' => $validation['summary']['duplicate_count'],
+                'candidate_ids'     => array_map(fn($r) => $r['candidate']->id, $result),
+            ]
         );
 
         return response()->json([
             'success' => true,
-            'message' => count($result) . ' متقاضی با موفقیت Import شد.',
+            'message' => count($result) . ' متقاضی معتبر با موفقیت در سیستم ثبت شدند.',
             'data'    => [
-                'imported'         => count($result),
-                'skipped_invalid'  => $validation['summary']['invalid_count'],
-                'skipped_duplicate'=> $validation['summary']['duplicate_count'],
-                'candidates'       => $result,
+                'imported_count'    => count($result),
+                'skipped_invalid'   => $validation['summary']['invalid_count'],
+                'skipped_duplicate' => $validation['summary']['duplicate_count'],
+                'candidates'        => $result,
             ],
         ], 201);
     }
@@ -292,66 +331,147 @@ class CandidateController extends Controller
     // ─── Assign ───────────────────────────────────────────────
 
     /**
-     * تخصیص متقاضی به آزمون، شفت، لابراتوار.
+     * تخصیص متقاضی به آزمون، شفت، لابراتوار و کامپیوتر.
      * بند 11 SRS — Assign Exam/Shift/Lab/Computer.
+     * کلیه قوانین احراز صلاحیت، سقف ظرفیت، عدم تداخل کامپیوتر، آزمون‌های Published
+     * و تراکنش اتمیک قفل‌دار در اینجا اعمال می‌گردد.
      */
     public function assign(AssignCandidateRequest $request, Candidate $candidate, AuditLogService $audit): JsonResponse
     {
-        $assignment = DB::transaction(function () use ($request, $candidate, $audit) {
-            // تخصیص قبلی (در صورت وجود) برای old_value خوانده می‌شود.
-            $previous = CandidateAssignment::where('candidate_id', $candidate->id)
-                ->where('exam_id', $request->exam_id)
-                ->first();
+        // 1. بررسی وضعیت خود متقاضی (نباید در حال آزمون یا تکمیل‌شده باشد)
+        if (in_array($candidate->status, ['in_progress', 'completed'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'امکان تغییر تخصیص برای متقاضی در حال برگزاری آزمون یا تکمیل‌شده وجود ندارد.',
+            ], 422);
+        }
 
-            $result = CandidateAssignment::updateOrCreate(
-                [
-                    'candidate_id' => $candidate->id,
-                    'exam_id'      => $request->exam_id,
-                ],
-                [
-                    'shift_id'    => $request->shift_id,
-                    'lab_id'      => $request->lab_id,
-                    'computer_id' => $request->computer_id,
-                ]
-            );
+        // 2. بررسی وضعیت آزمون — فقط published یا running
+        $exam = Exam::find($request->exam_id);
+        if (!$exam || !in_array($exam->status, ['published', 'running'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فقط آزمون‌های منتشرشده (Published) یا در حال برگزاری قابل تخصیص هستند.',
+            ], 422);
+        }
 
-            // فقط فیلدهایی که واقعاً تغییر کرده‌اند (یا در تخصیص اول مقدار گرفته‌اند) ثبت می‌شوند.
-            $changed = [];
-            foreach (['shift_id', 'lab_id', 'computer_id'] as $field) {
-                if ($previous === null || (string) $previous->{$field} !== (string) $result->{$field}) {
-                    $changed[] = $field;
-                }
+        // 3. بررسی تعلق شیفت به آزمون انتخاب‌شده
+        $shift = Shift::find($request->shift_id);
+        if (!$shift || (int) $shift->exam_id !== (int) $exam->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'نوبت آزمون (شیفت) انتخاب‌شده متعلق به این آزمون نیست.',
+            ], 422);
+        }
+
+        // 4. بررسی تطابق لابراتوار با محل برگزاری شیفت
+        if ((int) $shift->lab_id !== (int) $request->lab_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'لابراتوار انتخاب‌شده با محل تعیین‌شده برای این شیفت همخوانی ندارد.',
+            ], 422);
+        }
+
+        // 5. بررسی تعلق کامپیوتر به لابراتوار انتخاب‌شده
+        if ($request->filled('computer_id')) {
+            $computer = Computer::find($request->computer_id);
+            if (!$computer || (int) $computer->lab_id !== (int) $request->lab_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'کامپیوتر انتخاب‌شده متعلق به لابراتوار تعیین‌شده نیست.',
+                ], 422);
             }
+        }
 
-            // audit تخصیص در همان تراکنش
-            $audit->record(
-                'candidates',
-                'Candidate:assigned',
-                'Candidate',
-                $candidate->id,
-                $previous === null ? null : [
-                    'assignment_id' => $previous->id,
-                    'shift_id' => $previous->shift_id,
-                    'lab_id' => $previous->lab_id,
-                    'computer_id' => $previous->computer_id,
-                ],
-                [
-                    'assignment_id' => $result->id,
-                    'exam_id' => $result->exam_id,
-                    'shift_id' => $result->shift_id,
-                    'lab_id' => $result->lab_id,
-                    'computer_id' => $result->computer_id,
-                    'was_update' => $previous !== null,
-                ],
-                $changed
-            );
+        // 6. اجرای تخصیص درون Database Transaction با قفل سطری جهت جلوگیری از تداخل و همزمانی
+        try {
+            $assignment = DB::transaction(function () use ($request, $candidate, $exam, $shift, $audit) {
+                // قفل ردیف شیفت
+                $lockedShift = Shift::whereKey($shift->id)->lockForUpdate()->first();
 
-            return $result;
-        });
+                // بررسی سقف ظرفیت شیفت (با احتساب سایر متقاضیان)
+                $currentAssignedCount = CandidateAssignment::where('shift_id', $lockedShift->id)
+                    ->where('candidate_id', '!=', $candidate->id)
+                    ->lockForUpdate()
+                    ->count();
+
+                if ($lockedShift->capacity !== null && $currentAssignedCount >= $lockedShift->capacity) {
+                    throw new \RuntimeException("ظرفیت این شیفت ({$lockedShift->capacity} نفر) تکمیل شده است.");
+                }
+
+                // بررسی اشغال نبودن کامپیوتر در این شیفت توسط متقاضی دیگر
+                if ($request->filled('computer_id')) {
+                    $isOccupied = CandidateAssignment::where('shift_id', $lockedShift->id)
+                        ->where('computer_id', $request->computer_id)
+                        ->where('candidate_id', '!=', $candidate->id)
+                        ->lockForUpdate()
+                        ->exists();
+
+                    if ($isOccupied) {
+                        throw new \RuntimeException('این کامپیوتر در شیفت انتخابی قبلاً به متقاضی دیگری تخصیص داده شده است.');
+                    }
+                }
+
+                // دریافت تخصیص قبلی این متقاضی در همین آزمون برای ثبت ممیزی
+                $previous = CandidateAssignment::where('candidate_id', $candidate->id)
+                    ->where('exam_id', $exam->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                $result = CandidateAssignment::updateOrCreate(
+                    [
+                        'candidate_id' => $candidate->id,
+                        'exam_id'      => $exam->id,
+                    ],
+                    [
+                        'shift_id'    => $lockedShift->id,
+                        'lab_id'      => $request->lab_id,
+                        'computer_id' => $request->computer_id,
+                    ]
+                );
+
+                // ثبت دقیق تغییرات در AuditLog
+                $changed = [];
+                foreach (['shift_id', 'lab_id', 'computer_id'] as $field) {
+                    if ($previous === null || (string) $previous->{$field} !== (string) $result->{$field}) {
+                        $changed[] = $field;
+                    }
+                }
+
+                $audit->record(
+                    'candidates',
+                    'Candidate:assigned',
+                    'Candidate',
+                    $candidate->id,
+                    $previous === null ? null : [
+                        'assignment_id' => $previous->id,
+                        'shift_id'      => $previous->shift_id,
+                        'lab_id'        => $previous->lab_id,
+                        'computer_id'   => $previous->computer_id,
+                    ],
+                    [
+                        'assignment_id' => $result->id,
+                        'exam_id'       => $result->exam_id,
+                        'shift_id'      => $result->shift_id,
+                        'lab_id'        => $result->lab_id,
+                        'computer_id'   => $result->computer_id,
+                        'was_update'    => $previous !== null,
+                    ],
+                    $changed
+                );
+
+                return $result;
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'تخصیص با موفقیت انجام شد.',
+            'message' => 'تخصیص آزمون به متقاضی با موفقیت انجام شد.',
             'data'    => $assignment->load(['exam', 'shift', 'lab', 'computer']),
         ]);
     }
@@ -360,7 +480,6 @@ class CandidateController extends Controller
 
     /**
      * تولید کد یکتای متقاضی — مثلاً KND001.
-     * آخرین کد موجود را پیدا می‌کند و یکی اضافه می‌کند.
      */
     private function generateCandidateCode(string $prefix = 'KND'): string
     {
@@ -375,9 +494,24 @@ class CandidateController extends Controller
     }
 
     /**
-     * خواندن ردیف‌های فایل Excel یا CSV.
-     * فعلاً CSV ساده را پشتیبانی می‌کند.
-     * برای xlsx، نیاز به پکیج maatwebsite/excel است.
+     * نرمال‌سازی نام هدرهای ستون برای پشتیبانی از فرمت‌های فارسی و انگلیسی.
+     */
+    private function normalizeHeader(string $header): string
+    {
+        $h = preg_replace('/^\xEF\xBB\xBF/', '', trim($header));
+        $h = mb_strtolower($h, 'UTF-8');
+
+        if (in_array($h, ['نام', 'نام کامل', 'نام و تخلص', 'اسم', 'اسم مکمل', 'name', 'fullname', 'full_name'])) {
+            return 'name';
+        }
+        if (in_array($h, ['تذکره', 'نمبر تذکره', 'شماره تذکره', 'کد ملی', 'national_id', 'tazkira', 'nid'])) {
+            return 'national_id';
+        }
+        return $h;
+    }
+
+    /**
+     * خواندن ردیف‌های فایل Excel (XLSX/XLS) یا CSV.
      */
     private function readExcelFile(\Illuminate\Http\UploadedFile $file): array
     {
@@ -385,30 +519,144 @@ class CandidateController extends Controller
         $extension = strtolower($file->getClientOriginalExtension());
 
         if ($extension === 'csv') {
-            // خواندن CSV
             $handle = fopen($file->getRealPath(), 'r');
-            $headers = fgetcsv($handle); // ردیف اول header است
-
-            // نرمال‌سازی header — حذف فاصله و تبدیل به lowercase
-            $headers = array_map(fn($h) => strtolower(trim($h)), $headers);
-
-            while (($row = fgetcsv($handle)) !== false) {
-                if (count($row) === count($headers)) {
-                    $rows[] = array_combine($headers, $row);
+            if ($handle !== false) {
+                $rawHeaders = fgetcsv($handle, escape: "\\");
+                if ($rawHeaders) {
+                    $headers = array_map(fn($h) => $this->normalizeHeader((string)$h), $rawHeaders);
+                    while (($row = fgetcsv($handle, escape: "\\")) !== false) {
+                        if (count($row) === count($headers)) {
+                            $combined = array_combine($headers, $row);
+                            $name = trim($combined['name'] ?? '');
+                            $nid  = trim($combined['national_id'] ?? '') ?: null;
+                            if (!empty($name) || !empty($nid)) {
+                                $rows[] = [
+                                    'name'        => $name,
+                                    'national_id' => $nid,
+                                ];
+                            }
+                        }
+                    }
                 }
+                fclose($handle);
             }
-
-            fclose($handle);
-        }
-
-        // برای xlsx و xls: نیاز به maatwebsite/excel
-        // در فاز بعدی اضافه می‌شود
-        if (in_array($extension, ['xlsx', 'xls'])) {
-            // placeholder — فعلاً آرایه خالی برمی‌گردد
-            $rows = [];
+        } elseif (in_array($extension, ['xlsx', 'xls'])) {
+            $rows = $this->parseXlsxFile($file->getRealPath());
         }
 
         return $rows;
+    }
+
+    /**
+     * پارس خودکار و استاندارد فایل‌های XLSX بدون نیاز به پکیج‌های حجیم شخص ثالث.
+     */
+    private function parseXlsxFile(string $filePath): array
+    {
+        $zip = new \ZipArchive();
+        if ($zip->open($filePath) !== true) {
+            return [];
+        }
+
+        // ۱. استخراج رشته‌های مشترک (sharedStrings)
+        $sharedStrings = [];
+        $sharedStringsXml = $zip->getFromName('xl/sharedStrings.xml');
+        if ($sharedStringsXml) {
+            $xml = @simplexml_load_string($sharedStringsXml);
+            if ($xml && isset($xml->si)) {
+                foreach ($xml->si as $si) {
+                    if (isset($si->t)) {
+                        $sharedStrings[] = (string) $si->t;
+                    } elseif (isset($si->r)) {
+                        $str = '';
+                        foreach ($si->r as $r) {
+                            $str .= (string) ($r->t ?? '');
+                        }
+                        $sharedStrings[] = $str;
+                    } else {
+                        $sharedStrings[] = '';
+                    }
+                }
+            }
+        }
+
+        // ۲. استخراج شیت اول (worksheets/sheet1.xml)
+        $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
+        if (!$sheetXml) {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $entryName = $zip->getNameIndex($i);
+                if (preg_match('#xl/worksheets/sheet\d+\.xml#', $entryName)) {
+                    $sheetXml = $zip->getFromName($entryName);
+                    break;
+                }
+            }
+        }
+        $zip->close();
+
+        if (!$sheetXml) {
+            return [];
+        }
+
+        $xml = @simplexml_load_string($sheetXml);
+        if (!$xml || !isset($xml->sheetData->row)) {
+            return [];
+        }
+
+        $rawRows = [];
+        foreach ($xml->sheetData->row as $row) {
+            $rowData = [];
+            foreach ($row->c as $cell) {
+                $val = '';
+                $type = (string) $cell['t'];
+                if ($type === 's') {
+                    $idx = (int) $cell->v;
+                    $val = $sharedStrings[$idx] ?? '';
+                } elseif ($type === 'inlineStr' && isset($cell->is->t)) {
+                    $val = (string) $cell->is->t;
+                } elseif (isset($cell->v)) {
+                    $val = (string) $cell->v;
+                }
+
+                $cellRef = (string) $cell['r'];
+                preg_match('/^([A-Z]+)/', $cellRef, $matches);
+                $col = $matches[1] ?? '';
+                if ($col) {
+                    $rowData[$col] = trim($val);
+                }
+            }
+            if (!empty($rowData)) {
+                $rawRows[] = $rowData;
+            }
+        }
+
+        if (empty($rawRows)) {
+            return [];
+        }
+
+        // ردیف اول، هدر جدول است
+        $headerRow = array_shift($rawRows);
+        $headers = [];
+        foreach ($headerRow as $col => $name) {
+            $headers[$col] = $this->normalizeHeader((string) $name);
+        }
+
+        $result = [];
+        foreach ($rawRows as $row) {
+            $item = ['name' => '', 'national_id' => null];
+            foreach ($headers as $col => $key) {
+                if ($key === 'name' || $key === 'national_id') {
+                    $val = trim($row[$col] ?? '');
+                    if ($key === 'national_id' && $val === '') {
+                        $val = null;
+                    }
+                    $item[$key] = $val;
+                }
+            }
+            if (!empty($item['name']) || !empty($item['national_id'])) {
+                $result[] = $item;
+            }
+        }
+
+        return $result;
     }
 
 

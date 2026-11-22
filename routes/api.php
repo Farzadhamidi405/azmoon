@@ -169,6 +169,7 @@ Route::prefix("v1")->group(function () {
                 Route::get("/", [ShiftController::class, "index"]);
                 Route::post("/", [ShiftController::class, "store"]);
                 Route::get("/{shift}", [ShiftController::class, "show"]);
+                Route::get("/{shift}/assignment-meta", [ShiftController::class, "assignmentMeta"]);
                 Route::put("/{shift}", [ShiftController::class, "update"]);
                 Route::delete("/{shift}", [ShiftController::class, "destroy"]);
             });

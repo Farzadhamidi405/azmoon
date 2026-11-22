@@ -20,11 +20,11 @@ class ShiftPolicy
     }
 
     /**
-     * Show a single record. Requires labs.view.
+     * Show a single record. Requires labs.view or candidates.update (for candidate assignment).
      */
     public function view(User $user): bool
     {
-        return $user->hasPermission('labs.view');
+        return $user->hasPermission('labs.view') || $user->hasPermission('candidates.update');
     }
 
     /**

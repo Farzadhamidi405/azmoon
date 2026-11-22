@@ -77,6 +77,12 @@ export default function useCandidates(filters = {}) {
     return res.data;
   };
 
+  const assign = async (id, data) => {
+    const res = await api.post(`${API_BASE}/admin/candidates/${id}/assign`, data);
+    reload();
+    return unwrapItem(res.data);
+  };
+
   const checkIn = async (id) => {
     const res = await api.post(`${API_BASE}/admin/candidates/${id}/checkin`);
     reload();
@@ -98,6 +104,7 @@ export default function useCandidates(filters = {}) {
     get,
     create,
     update,
+    assign,
     toggleStatus,
     remove,
     bulkGenerate,

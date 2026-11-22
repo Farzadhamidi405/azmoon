@@ -14,6 +14,7 @@ import {
 } from '../../components/ui/index.js';
 import CandidateFormModal from '../../components/candidates/CandidateFormModal.jsx';
 import CandidateBulkGenerateModal from '../../components/candidates/CandidateBulkGenerateModal.jsx';
+import CandidateAssignModal from '../../components/candidates/CandidateAssignModal.jsx';
 import CandidateDetailModal from '../../components/candidates/CandidateDetailModal.jsx';
 import useCandidates from '../../hooks/useCandidates.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -85,6 +86,8 @@ export default function CandidatesPage({ action = null }) {
 
   const [formOpen, setFormOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignCandidate, setAssignCandidate] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [editingCandidate, setEditingCandidate] = useState(null);
@@ -264,6 +267,21 @@ export default function CandidatesPage({ action = null }) {
                 جزئیات
               </Button>
 
+              {/* تخصیص آزمون و صندلی */}
+              {canUpdate && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setAssignCandidate(row);
+                    setAssignOpen(true);
+                  }}
+                  title="تخصیص به آزمون، شیفت و صندلی"
+                >
+                  تخصیص
+                </Button>
+              )}
+
               {/* کارت ورود */}
               <Button
                 size="sm"
@@ -404,6 +422,17 @@ export default function CandidatesPage({ action = null }) {
             </Link>
             {canManage && (
               <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setAssignCandidate(null);
+                    setAssignOpen(true);
+                  }}
+                  title="تخصیص متقاضی به آزمون و صندلی"
+                >
+                  🎯 تخصیص آزمون
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)}>
                   ⚡ تولید گروهی
                 </Button>
@@ -561,6 +590,18 @@ export default function CandidatesPage({ action = null }) {
         onClose={() => setBulkOpen(false)}
         onGenerate={bulkGenerate}
         busy={busy}
+      />
+
+      {/* مودال تخصیص آزمون و صندلی */}
+      <CandidateAssignModal
+        open={assignOpen}
+        onClose={() => {
+          setAssignOpen(false);
+          setAssignCandidate(null);
+        }}
+        candidate={assignCandidate}
+        allCandidates={items}
+        onAssigned={() => reload()}
       />
 
       {/* مودال کارت ورود با قابلیت چاپ */}

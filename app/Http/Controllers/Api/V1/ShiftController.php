@@ -192,4 +192,67 @@ class ShiftController extends Controller
             'message' => 'شفت با موفقیت حذف شد.',
         ]);
     }
+
+    /**
+     * متای تخصیص برای یک شیفت: اطلاعات ظرفیت و وضعیت اشغال کامپیوترها در این شیفت.
+     */
+    public function assignmentMeta(Shift $shift): JsonResponse
+    {
+        Gate::authorize('view', $shift);
+
+        $shift->load(['exam:id,title,status', 'lab:id,name']);
+
+        $computers = \App\Models\Computer::where('lab_id', $shift->lab_id)
+            ->orderBy('computer_code')
+            ->get();
+
+        $assignments = \App\Models\CandidateAssignment::where('shift_id', $shift->id)
+            ->with('candidate:id,name,candidate_code')
+            ->get();
+
+        $occupiedMap = [];
+        foreach ($assignments as $a) {
+            if ($a->computer_id) {
+                $occupiedMap[$a->computer_id] = [
+                    'candidate_id'   => $a->candidate_id,
+                    'candidate_name' => $a->candidate?->name,
+                    'candidate_code' => $a->candidate?->candidate_code,
+                ];
+            }
+        }
+
+        $computerList = $computers->map(function ($c) use ($occupiedMap) {
+            $isOccupied = isset($occupiedMap[$c->id]);
+            return [
+                'id'            => $c->id,
+                'computer_code' => $c->computer_code,
+                'ip_address'    => $c->ip_address,
+                'status'        => $c->status,
+                'is_occupied'   => $isOccupied,
+                'occupied_by'   => $isOccupied ? $occupiedMap[$c->id] : null,
+            ];
+        });
+
+        $assignedCount = $assignments->count();
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'shift' => [
+                    'id'                 => $shift->id,
+                    'name'               => $shift->name,
+                    'start_time'         => $shift->start_time,
+                    'end_time'           => $shift->end_time,
+                    'capacity'           => $shift->capacity,
+                    'assigned_count'     => $assignedCount,
+                    'remaining_capacity' => max(0, ($shift->capacity ?? 0) - $assignedCount),
+                ],
+                'lab' => [
+                    'id'   => $shift->lab?->id,
+                    'name' => $shift->lab?->name,
+                ],
+                'computers' => $computerList,
+            ],
+        ]);
+    }
 }
