@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 /**
@@ -391,7 +392,7 @@ class QuestionController extends Controller
      */
     public function approveAll(Request $request, AuditLogService $audit): \Illuminate\Http\JsonResponse
     {
-        $user = Auth::user();
+        $user = Auth::user() ?: auth('admin')->user();
         if (!$user || !in_array($user->role?->name, ['Super Admin', 'Exam Administrator', 'Reviewer'])) {
             return response()->json([
                 'success' => false,
@@ -411,15 +412,21 @@ class QuestionController extends Controller
         $reviewerId = $user->id;
 
         DB::transaction(function () use ($questions, $reviewerId, $audit, &$approvedCount, &$skippedCount) {
+            $hasReviewedAt = Schema::hasColumn('questions', 'reviewed_at');
+
             foreach ($questions as $question) {
                 if (Gate::allows('changeStatus', $question)) {
                     $previousStatus = (string) $question->status;
-                    $question->update([
+                    $updatePayload = [
                         'status'           => 'approved',
                         'reviewed_by'      => $reviewerId,
-                        'reviewed_at'      => now(),
                         'rejection_reason' => null,
-                    ]);
+                    ];
+                    if ($hasReviewedAt) {
+                        $updatePayload['reviewed_at'] = now();
+                    }
+
+                    $question->update($updatePayload);
 
                     try {
                         $audit->statusChanged(
@@ -501,6 +508,9 @@ class QuestionController extends Controller
 
             $updateData = ['status' => $newStatus];
 
+            $hasReviewedAt = Schema::hasColumn('questions', 'reviewed_at');
+            $currentUserId = Auth::id() ?: auth('admin')->id();
+
             // در صورت رد سوال (under_review -> draft)، ثبت الزامی دلیل رد و ثبت بازبین
             if ($oldStatus === 'under_review' && $newStatus === 'draft') {
                 $request->validate([
@@ -510,13 +520,17 @@ class QuestionController extends Controller
                     'rejection_reason.min'      => 'دلیل رد سوال باید حداقل ۳ حرف باشد.',
                 ]);
 
-                $updateData['reviewed_by'] = Auth::id();
-                $updateData['reviewed_at'] = now();
+                $updateData['reviewed_by'] = $currentUserId;
+                if ($hasReviewedAt) {
+                    $updateData['reviewed_at'] = now();
+                }
                 $updateData['rejection_reason'] = $request->rejection_reason;
             } elseif ($newStatus === 'approved') {
                 // در صورت تأیید سوال (under_review -> approved)، ثبت بازبین و پاکسازی دلیل رد
-                $updateData['reviewed_by'] = Auth::id();
-                $updateData['reviewed_at'] = now();
+                $updateData['reviewed_by'] = $currentUserId;
+                if ($hasReviewedAt) {
+                    $updateData['reviewed_at'] = now();
+                }
                 $updateData['rejection_reason'] = null;
             } elseif ($oldStatus === 'draft' && $newStatus === 'under_review') {
                 // ارسال مجدد سوال برای بررسی — پاکسازی دلیل رد قبلی
