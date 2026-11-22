@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class ExamQuestionPool extends Model
 {
+    protected $table = 'exam_question_pool';
+
     protected $fillable = [
         'exam_section_id',
         'pool_size',
