@@ -39,6 +39,11 @@ export default function useExams(filters = {}) {
 
   const reload = useCallback((params) => fetchExams(params), [fetchExams]);
 
+  const getExam = async (id) => {
+    const res = await api.get(`${API_BASE}/admin/exams/${id}`);
+    return unwrapItem(res.data);
+  };
+
   const create = async (data) => {
     const res = await api.post(`${API_BASE}/admin/exams`, data);
     const created = unwrapItem(res.data);
@@ -106,6 +111,7 @@ export default function useExams(filters = {}) {
     loading,
     error,
     reload,
+    getExam,
     create,
     update,
     changeStatus,

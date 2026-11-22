@@ -94,6 +94,7 @@ export default function App() {
                     <Route path="dashboard" element={<DashboardPage />} />
                     <Route path="exams" element={<ExamsPage />} />
                     <Route path="exams/create" element={<ExamCreatePage />} />
+                    <Route path="exams/:id/edit" element={<ExamCreatePage />} />
                     <Route path="exams/pool" element={<ExamPoolPage />} />
                     <Route path="questions" element={<QuestionsPage />} />
                     <Route path="questions/approval" element={<QuestionApprovalPage />} />

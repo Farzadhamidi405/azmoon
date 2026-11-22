@@ -202,10 +202,7 @@ export default function ExamsPage() {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  setEditingExam(row);
-                  setFormOpen(true);
-                }}
+                onClick={() => navigate(`/admin/exams/${row.id}/edit`)}
               >
                 {isEditable ? 'ویرایش' : 'مشاهده'}
               </Button>
