@@ -420,14 +420,21 @@ class QuestionController extends Controller
                         'rejection_reason' => null,
                     ]);
 
-                    $audit->statusChanged(
-                        'questions',
-                        'Question:status_changed',
-                        $question,
-                        $previousStatus,
-                        'approved',
-                        ['reviewed_by' => $reviewerId, 'bulk' => true]
-                    );
+                    try {
+                        $audit->statusChanged(
+                            'questions',
+                            'Question:status_changed',
+                            $question,
+                            $previousStatus,
+                            'approved',
+                            ['reviewed_by' => $reviewerId, 'bulk' => true]
+                        );
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::error('AuditLog approveAll failed: ' . $e->getMessage(), [
+                            'question_id' => $question->id,
+                            'exception'   => $e,
+                        ]);
+                    }
 
                     $approvedCount++;
                 } else {
@@ -459,80 +466,106 @@ class QuestionController extends Controller
      */
     public function changeStatus(Request $request, Question $question, AuditLogService $audit)
     {
-        Gate::authorize('changeStatus', $question);
+        try {
+            Gate::authorize('changeStatus', $question);
 
-        $request->validate([
-            'status' => ['required', Rule::in(Question::STATUSES)],
-            'rejection_reason' => [
-                'nullable',
-                'string',
-                'max:1000',
-            ],
-        ]);
-
-        $newStatus = $request->status;
-        $oldStatus = $question->status;
-
-        // انتقال‌های مجاز طبق SRS
-        $allowed = [
-            'draft'        => ['under_review'],
-            'under_review' => ['draft', 'approved'],
-            'approved'     => ['active', 'inactive'],
-            'active'       => ['inactive', 'archived'],
-            'inactive'     => ['active', 'archived'],
-            'archived'     => [],
-        ];
-
-        if (!in_array($newStatus, $allowed[$oldStatus] ?? [])) {
-            return response()->json([
-                'success' => false,
-                'message' => "انتقال از «{$oldStatus}» به «{$newStatus}» مجاز نیست.",
-            ], 422);
-        }
-
-        $updateData = ['status' => $newStatus];
-
-        // در صورت رد سوال (under_review -> draft)، ثبت الزامی دلیل رد و ثبت بازبین
-        if ($oldStatus === 'under_review' && $newStatus === 'draft') {
             $request->validate([
-                'rejection_reason' => ['required', 'string', 'min:3', 'max:1000'],
-            ], [
-                'rejection_reason.required' => 'ثبت دلیل رد سوال الزامی است.',
-                'rejection_reason.min'      => 'دلیل رد سوال باید حداقل ۳ حرف باشد.',
+                'status' => ['required', Rule::in(Question::STATUSES)],
+                'rejection_reason' => [
+                    'nullable',
+                    'string',
+                    'max:1000',
+                ],
             ]);
 
-            $updateData['reviewed_by'] = Auth::id();
-            $updateData['rejection_reason'] = $request->rejection_reason;
-        } elseif ($newStatus === 'approved') {
-            // در صورت تأیید سوال (under_review -> approved)، ثبت بازبین و پاکسازی دلیل رد
-            $updateData['reviewed_by'] = Auth::id();
-            $updateData['rejection_reason'] = null;
-        } elseif ($oldStatus === 'draft' && $newStatus === 'under_review') {
-            // ارسال مجدد سوال برای بررسی — پاکسازی دلیل رد قبلی
-            $updateData['rejection_reason'] = null;
+            $newStatus = $request->status;
+            $oldStatus = $question->status;
+
+            // انتقال‌های مجاز طبق SRS
+            $allowed = [
+                'draft'        => ['under_review'],
+                'under_review' => ['draft', 'approved'],
+                'approved'     => ['active', 'inactive'],
+                'active'       => ['inactive', 'archived'],
+                'inactive'     => ['active', 'archived'],
+                'archived'     => [],
+            ];
+
+            if (!in_array($newStatus, $allowed[$oldStatus] ?? [])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "انتقال از «{$oldStatus}» به «{$newStatus}» مجاز نیست.",
+                ], 422);
+            }
+
+            $updateData = ['status' => $newStatus];
+
+            // در صورت رد سوال (under_review -> draft)، ثبت الزامی دلیل رد و ثبت بازبین
+            if ($oldStatus === 'under_review' && $newStatus === 'draft') {
+                $request->validate([
+                    'rejection_reason' => ['required', 'string', 'min:3', 'max:1000'],
+                ], [
+                    'rejection_reason.required' => 'ثبت دلیل رد سوال الزامی است.',
+                    'rejection_reason.min'      => 'دلیل رد سوال باید حداقل ۳ حرف باشد.',
+                ]);
+
+                $updateData['reviewed_by'] = Auth::id();
+                $updateData['rejection_reason'] = $request->rejection_reason;
+            } elseif ($newStatus === 'approved') {
+                // در صورت تأیید سوال (under_review -> approved)، ثبت بازبین و پاکسازی دلیل رد
+                $updateData['reviewed_by'] = Auth::id();
+                $updateData['rejection_reason'] = null;
+            } elseif ($oldStatus === 'draft' && $newStatus === 'under_review') {
+                // ارسال مجدد سوال برای بررسی — پاکسازی دلیل رد قبلی
+                $updateData['rejection_reason'] = null;
+            }
+
+            // وضعیت قبلی، تغییر وضعیت و ثبت audit در یک تراکنش.
+            $previousStatus = (string) $question->status;
+
+            DB::transaction(function () use ($question, $updateData, $audit, $previousStatus) {
+                $question->update($updateData);
+
+                try {
+                    $audit->statusChanged(
+                        'questions',
+                        'Question:status_changed',
+                        $question,
+                        $previousStatus,
+                        (string) $question->status,
+                        array_diff_key($updateData, ['status' => true])
+                    );
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error('AuditLog statusChanged failed: ' . $e->getMessage(), [
+                        'question_id' => $question->id,
+                        'exception'   => $e,
+                    ]);
+                }
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => "وضعیت سوال با موفقیت به «{$newStatus}» تغییر کرد.",
+                'data'    => $question->fresh(['subject', 'createdBy', 'reviewedBy', 'options', 'passage', 'media']),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'شما مجوز تغییر وضعیت این سوال را ندارید.',
+            ], 403);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Error changing question status: ' . $e->getMessage(), [
+                'question_id' => $question->id,
+                'trace'       => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'خطا در تغییر وضعیت سوال: ' . $e->getMessage(),
+            ], 500);
         }
-
-        // وضعیت قبلی، تغییر وضعیت و ثبت audit در یک تراکنش.
-        $previousStatus = (string) $question->status;
-
-        DB::transaction(function () use ($question, $updateData, $audit, $previousStatus) {
-            $question->update($updateData);
-
-            $audit->statusChanged(
-                'questions',
-                'Question:status_changed',
-                $question,
-                $previousStatus,
-                (string) $question->status,
-                array_diff_key($updateData, ['status' => true])
-            );
-        });
-
-        return response()->json([
-            'success' => true,
-            'message' => "وضعیت سوال با موفقیت به «{$newStatus}» تغییر کرد.",
-            'data'    => $question->fresh(['subject', 'createdBy', 'reviewedBy', 'options', 'passage', 'media']),
-        ]);
     }
 
     /**
