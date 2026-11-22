@@ -13,7 +13,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-[760px] space-y-4">
+    <div className="max-w-[820px] mx-auto w-full space-y-4">
       <PageHeader
         title="تنظیمات سیستم"
         crumb={['سیستم', 'تنظیمات']}

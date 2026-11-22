@@ -50,7 +50,7 @@ export default function CandidateImportPage() {
   };
 
   return (
-    <div className="max-w-[680px] space-y-4">
+    <div className="max-w-[760px] mx-auto w-full space-y-4">
       <PageHeader
         title="وارد کردن متقاضیان از Excel"
         crumb={['متقاضیان', 'Import از اکسل']}

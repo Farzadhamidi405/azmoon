@@ -73,7 +73,7 @@ export default function ManualOverridePage() {
   const currentSession = sessions.find((s) => String(s.id) === String(selectedAttemptId));
 
   return (
-    <div className="max-w-[680px] space-y-4">
+    <div className="max-w-[760px] mx-auto w-full space-y-4">
       <PageHeader
         title={`Manual Override — جلسه ${currentSession ? `«${currentSession.candidate?.name || 'متقاضی'}»` : ''}`}
         crumb={['جلسات و لابراتوار', 'Manual Override']}

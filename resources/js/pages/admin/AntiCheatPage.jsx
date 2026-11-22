@@ -142,7 +142,7 @@ export default function AntiCheatPage() {
       {!error && !loading && (
         <div className="space-y-4 mb-4">
           {/* Prototyped Visual Risk Meter Card */}
-          <div className="card max-w-[720px]">
+          <div className="card w-full">
             <div className="font-bold text-navy mb-2 text-sm flex items-center justify-between">
               <span>Risk Score کلی داوطلبان دارای ریسک:</span>
               <span className="text-amber font-mono font-bold">68 / 100 (متوسط)</span>

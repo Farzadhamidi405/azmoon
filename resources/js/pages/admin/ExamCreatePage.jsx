@@ -521,17 +521,17 @@ export default function ExamCreatePage() {
 
   return (
     <>
-      <PageHeader
-        title={isEdit ? `ویرایش آزمون: ${formData.title}` : 'ایجاد آزمون جدید'}
-        crumb={['آزمون‌ها', isEdit ? 'ویرایش آزمون' : 'ایجاد جدید']}
-        actions={
-          <Button variant="outline" onClick={() => navigate('/admin/exams')}>
-            بازگشت به لیست
-          </Button>
-        }
-      />
+      <div className="max-w-[820px] mx-auto w-full space-y-4">
+        <PageHeader
+          title={isEdit ? `ویرایش آزمون: ${formData.title}` : 'ایجاد آزمون جدید'}
+          crumb={['آزمون‌ها', isEdit ? 'ویرایش آزمون' : 'ایجاد جدید']}
+          actions={
+            <Button variant="outline" onClick={() => navigate('/admin/exams')}>
+              بازگشت به لیست
+            </Button>
+          }
+        />
 
-      <div className="max-w-[780px] space-y-4">
         {/* هشدار وضعیت غیرقابل ویرایش در صورت وجود */}
         {!isEditable && (
           <div className="p-3.5 rounded-xl border border-amber/40 bg-amber/10 text-xs text-navy font-bold leading-relaxed">

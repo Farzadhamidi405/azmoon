@@ -76,7 +76,7 @@ export default function ExamPoolPage() {
   const currentExam = exams.find((e) => String(e.id) === String(selectedExamId));
 
   return (
-    <div className="max-w-[720px] space-y-4">
+    <div className="max-w-[800px] mx-auto w-full space-y-4">
       <PageHeader
         title={`Question Pool — ${currentExam?.title || 'آزمون'}`}
         crumb={['آزمون‌ها', 'Question Pool']}
