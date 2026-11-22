@@ -11,14 +11,13 @@ import {
   Modal,
   PageHeader,
   Pagination,
-  Spinner,
 } from '../../components/ui/index.js';
 import CandidateFormModal from '../../components/candidates/CandidateFormModal.jsx';
 import CandidateBulkGenerateModal from '../../components/candidates/CandidateBulkGenerateModal.jsx';
 import CandidateDetailModal from '../../components/candidates/CandidateDetailModal.jsx';
 import useCandidates from '../../hooks/useCandidates.js';
-import useExams from '../../hooks/useExams.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { api, unwrapList } from '../../lib/api.js';
 import { notifyError, notifySuccess } from '../../lib/notify.js';
 
 // نگاشت وضعیت‌های جامع جدول candidates
@@ -43,15 +42,32 @@ export default function CandidatesPage({ action = null }) {
 
   const [filters, setFilters] = useState({ search: '', status: '', exam_id: '' });
   const [page, setPage] = useState(1);
+  const [examsList, setExamsList] = useState([]);
 
-  // دریافت آزمون‌ها برای فیلتر آزمون در بالای صفحه
-  const { items: examsList } = useExams({ per_page: 100 });
+  // دریافت آرام و ایمن لیست آزمون‌ها برای فیلتر کشویی (بدون توست خطای ۴۰۳ در صورت عدم دسترسی)
+  useEffect(() => {
+    let active = true;
+    api
+      .get('/api/v1/admin/exams', { params: { per_page: 100 }, skipErrorToast: true })
+      .then((res) => {
+        if (!active) return;
+        const unwrapped = unwrapList(res.data);
+        setExamsList(unwrapped.items || []);
+      })
+      .catch(() => {
+        if (active) setExamsList([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const {
     items,
     pagination,
     stats,
     loading,
+    error,
     reload,
     get: getCandidateDetail,
     create,
@@ -167,7 +183,7 @@ export default function CandidatesPage({ action = null }) {
     setDetailOpen(true);
   };
 
-  // ستون‌های جدول
+  // ستون‌های جدول: تمامی توابع render به صورت صریح با ۲ آرگومان (_, row) تعریف شده‌اند تا از پاس داده شدن اشتباه آبجکت به JSX در DataTable جلوگیری شود
   const columns = useMemo(
     () => [
       {
@@ -184,7 +200,7 @@ export default function CandidatesPage({ action = null }) {
             </div>
             <div className="text-[11px] text-ink-soft font-mono flex items-center gap-1.5 mt-0.5">
               <span>کد: <b className="text-navy">{row.candidate_code}</b></span>
-              {row.national_id && <span>· تذکره: {row.national_id}</span>}
+              {row.national_id ? <span>· تذکره: {row.national_id}</span> : null}
             </div>
           </div>
         ),
@@ -192,9 +208,9 @@ export default function CandidatesPage({ action = null }) {
       {
         key: 'username',
         title: 'نام کاربری',
-        render: (un) => (
+        render: (_, row) => (
           <span className="font-mono text-xs text-navy font-semibold bg-panel-2 px-2 py-0.5 rounded border border-line">
-            {un}
+            {row.username || '—'}
           </span>
         ),
       },
@@ -209,11 +225,11 @@ export default function CandidatesPage({ action = null }) {
               <div className="text-xs font-semibold text-ink line-clamp-1">
                 {examTitle || 'تخصیص نیافته'}
               </div>
-              {assignment?.shift?.name && (
+              {assignment?.shift?.name ? (
                 <div className="text-[11px] text-ink-soft mt-0.5">
                   شیفت: {assignment.shift.name}
                 </div>
-              )}
+              ) : null}
             </div>
           );
         },
@@ -221,8 +237,8 @@ export default function CandidatesPage({ action = null }) {
       {
         key: 'status',
         title: 'وضعیت',
-        render: (st) => {
-          const cfg = STATUS_CONFIG[st] || { label: st || 'نامشخص', tone: 'off' };
+        render: (_, row) => {
+          const cfg = STATUS_CONFIG[row.status] || { label: row.status || 'نامشخص', tone: 'off' };
           return <Badge tone={cfg.tone}>{cfg.label}</Badge>;
         },
       },
@@ -230,6 +246,7 @@ export default function CandidatesPage({ action = null }) {
         key: 'actions',
         title: 'عملیات',
         align: 'end',
+        actions: true,
         render: (_, row) => {
           const isCardBusy = cardLoadingId === row.id;
           const isStatusBusy = statusTogglingId === row.id;
@@ -364,10 +381,10 @@ export default function CandidatesPage({ action = null }) {
   const absentCount = stats?.absent ?? items.filter((c) => c.status === 'absent').length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 font-vazir">
       <PageHeader
-        title="مدیریت متقاضیان"
-        crumb={['پوهنتون کندز', 'متقاضیان']}
+        title="همه متقاضیان"
+        crumb={['پوهنتون کندز', 'متقاضیان', 'همه متقاضیان']}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <Link to="/admin/candidates/import">
@@ -466,7 +483,7 @@ export default function CandidatesPage({ action = null }) {
           className="min-w-[180px]"
         >
           <option value="">آزمون: همه آزمون‌ها</option>
-          {examsList.map((ex) => (
+          {(examsList || []).map((ex) => (
             <option key={ex.id} value={ex.id}>
               {ex.title}
             </option>
@@ -493,7 +510,10 @@ export default function CandidatesPage({ action = null }) {
           columns={columns}
           data={items}
           loading={loading}
+          error={error}
+          onRetry={reload}
           emptyTitle="هیچ متقاضی‌ای با این مشخصات یافت نشد."
+          emptyDescription="می‌توانید با دکمه‌های بالای صفحه متقاضی جدید ایجاد کرده یا از اکسل وارد نمایید."
         />
         {pagination && pagination.lastPage > 1 && (
           <div className="p-3 border-t border-line flex justify-center">
@@ -551,8 +571,8 @@ export default function CandidatesPage({ action = null }) {
           title="کارت ورود به جلسه آزمون"
           size="md"
         >
-          <div className="space-y-4">
-            <div className="border-2 border-navy rounded-2xl p-4 bg-panel shadow-sm flex gap-4 text-xs font-vazir">
+          <div className="space-y-4 font-vazir">
+            <div className="border-2 border-navy rounded-2xl p-4 bg-panel shadow-sm flex gap-4 text-xs">
               {/* شبیه‌ساز QR Token امن */}
               <div className="size-24 bg-paper border border-line rounded-xl p-2 flex flex-col items-center justify-center shrink-0 text-center">
                 <span className="text-2xl">🔲</span>

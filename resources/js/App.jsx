@@ -100,11 +100,11 @@ export default function App() {
                     <Route path="questions/approval" element={<QuestionApprovalPage />} />
                     <Route path="candidates" element={<CandidatesPage />} />
                     <Route path="candidates/create" element={<CandidatesPage action="create" />} />
-                    <Route path="candidates/:id" element={<CandidatesPage action="view" />} />
-                    <Route path="candidates/:id/edit" element={<CandidatesPage action="edit" />} />
                     <Route path="candidates/checkin" element={<CandidateCheckinPage />} />
                     <Route path="candidates/import" element={<CandidateImportPage />} />
                     <Route path="candidates/cards" element={<CandidateCardsPage />} />
+                    <Route path="candidates/:id" element={<CandidatesPage action="view" />} />
+                    <Route path="candidates/:id/edit" element={<CandidatesPage action="edit" />} />
                     <Route path="cards" element={<Navigate to="/admin/candidates/cards" replace />} />
                     <Route path="faculties" element={<FacultiesPage />} />
                     <Route path="subjects" element={<SubjectsPage />} />
