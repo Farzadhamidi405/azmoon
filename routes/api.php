@@ -135,6 +135,7 @@ Route::prefix("v1")->group(function () {
             Route::prefix("questions")->group(function () {
                 Route::get("/", [QuestionController::class, "index"]);
                 Route::post("/", [QuestionController::class, "store"]);
+                Route::post("/approve-all", [QuestionController::class, "approveAll"]);
                 Route::get("/{question}", [QuestionController::class, "show"]);
                 Route::put("/{question}", [QuestionController::class, "update"]);
                 Route::delete("/{question}", [QuestionController::class, "destroy"]);

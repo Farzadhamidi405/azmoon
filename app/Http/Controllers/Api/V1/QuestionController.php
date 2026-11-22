@@ -386,6 +386,74 @@ class QuestionController extends Controller
     }
 
     /**
+     * تأیید گروهی سوالات در انتظار بررسی (Approve All).
+     * فقط سوالات واجد شرایط و دارای مجوز در وضعیت under_review تأیید می‌شوند.
+     */
+    public function approveAll(Request $request, AuditLogService $audit): \Illuminate\Http\JsonResponse
+    {
+        $user = Auth::user();
+        if (!$user || !in_array($user->role?->name, ['Super Admin', 'Exam Administrator', 'Reviewer'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'شما مجوز تأیید سوالات را ندارید.',
+            ], 403);
+        }
+
+        $query = Question::where('status', 'under_review')
+            ->when($request->subject_id, fn($q) => $q->where('subject_id', $request->subject_id))
+            ->when($request->section_name, fn($q) => $q->where('section_name', $request->section_name))
+            ->when($request->question_ids, fn($q) => $q->whereIn('id', (array) $request->question_ids));
+
+        $questions = $query->get();
+
+        $approvedCount = 0;
+        $skippedCount = 0;
+        $reviewerId = $user->id;
+
+        DB::transaction(function () use ($questions, $reviewerId, $audit, &$approvedCount, &$skippedCount) {
+            foreach ($questions as $question) {
+                if (Gate::allows('changeStatus', $question)) {
+                    $previousStatus = (string) $question->status;
+                    $question->update([
+                        'status'           => 'approved',
+                        'reviewed_by'      => $reviewerId,
+                        'rejection_reason' => null,
+                    ]);
+
+                    $audit->statusChanged(
+                        'questions',
+                        'Question:status_changed',
+                        $question,
+                        $previousStatus,
+                        'approved',
+                        ['reviewed_by' => $reviewerId, 'bulk' => true]
+                    );
+
+                    $approvedCount++;
+                } else {
+                    $skippedCount++;
+                }
+            }
+        });
+
+        $message = $approvedCount > 0
+            ? "تعداد {$approvedCount} سوال با موفقیت تأیید شد."
+            : 'هیچ سوال واجد شرایطی برای تأیید یافت نشد.';
+
+        if ($skippedCount > 0) {
+            $message .= " ({$skippedCount} سوال بدون تغییر باقی ماند).";
+        }
+
+        return response()->json([
+            'success'          => true,
+            'message'          => $message,
+            'approved_count'   => $approvedCount,
+            'skipped_count'    => $skippedCount,
+            'total_processed'  => $questions->count(),
+        ]);
+    }
+
+    /**
      * تغییر وضعیت سوال — Approval Workflow.
      * Draft → Under Review → Approved → Active
      */

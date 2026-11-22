@@ -207,4 +207,37 @@ class QuestionApprovalTest extends TestCase
         $question->refresh();
         $this->assertEquals('active', $question->status);
     }
+
+    public function test_reviewer_can_approve_all_under_review_questions(): void
+    {
+        $q1 = $this->createQuestion('under_review');
+        $q2 = $this->createQuestion('under_review');
+        $draftQ = $this->createQuestion('draft');
+
+        $response = $this->actingAs($this->reviewer)
+            ->postJson('/api/v1/admin/questions/approve-all');
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('approved_count', 2);
+
+        $q1->refresh();
+        $q2->refresh();
+        $draftQ->refresh();
+
+        $this->assertEquals('approved', $q1->status);
+        $this->assertEquals($this->reviewer->id, $q1->reviewed_by);
+        $this->assertEquals('approved', $q2->status);
+        $this->assertEquals('draft', $draftQ->status);
+    }
+
+    public function test_unauthorized_user_cannot_approve_all(): void
+    {
+        $this->createQuestion('under_review');
+
+        $response = $this->actingAs($this->unauthorizedUser)
+            ->postJson('/api/v1/admin/questions/approve-all');
+
+        $response->assertStatus(403);
+    }
 }

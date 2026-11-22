@@ -96,6 +96,12 @@ export default function useQuestions(filters = {}) {
     return updated;
   };
 
+  const approveAll = async (params = {}) => {
+    const res = await api.post(`${API_BASE}/admin/questions/approve-all`, params);
+    await fetchQuestions();
+    return res.data;
+  };
+
   const remove = async (id) => {
     await api.delete(`${API_BASE}/admin/questions/${id}`);
     setItems((prev) => prev.filter((q) => q.id !== id));
@@ -117,6 +123,7 @@ export default function useQuestions(filters = {}) {
     create,
     update,
     changeStatus,
+    approveAll,
     remove,
     getVersions,
   };
