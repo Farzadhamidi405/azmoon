@@ -130,6 +130,7 @@ class QuestionApprovalTest extends TestCase
         $question->refresh();
         $this->assertEquals('approved', $question->status);
         $this->assertEquals($this->reviewer->id, $question->reviewed_by);
+        $this->assertNotNull($question->reviewed_at);
         $this->assertNull($question->rejection_reason);
     }
 
@@ -150,6 +151,7 @@ class QuestionApprovalTest extends TestCase
         // طبق SRS رد سوال باید وضعیت آن را به draft برگرداند همراه با ثبت دلیل رد
         $this->assertEquals('draft', $question->status);
         $this->assertEquals($this->reviewer->id, $question->reviewed_by);
+        $this->assertNotNull($question->reviewed_at);
         $this->assertEquals('گزینه صحیح به اشتباه علامت‌گذاری شده است.', $question->rejection_reason);
     }
 
