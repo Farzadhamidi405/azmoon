@@ -119,6 +119,7 @@ Route::prefix("v1")->group(function () {
             Route::prefix("exams")->group(function () {
                 Route::get("/", [ExamController::class, "index"]);
                 Route::post("/", [ExamController::class, "store"]);
+                Route::get("/sections", [ExamController::class, "getAvailableSections"]);
                 Route::get("/{exam}", [ExamController::class, "show"]);
                 Route::put("/{exam}", [ExamController::class, "update"]);
                 Route::delete("/{exam}", [ExamController::class, "destroy"]);
@@ -134,6 +135,7 @@ Route::prefix("v1")->group(function () {
             // ─── Question Bank ─────────────────────────────────────
             Route::prefix("questions")->group(function () {
                 Route::get("/", [QuestionController::class, "index"]);
+                Route::get("/sections", [ExamController::class, "getAvailableSections"]);
                 Route::post("/", [QuestionController::class, "store"]);
                 Route::post("/approve-all", [QuestionController::class, "approveAll"]);
                 Route::get("/{question}", [QuestionController::class, "show"]);

@@ -34,13 +34,23 @@ const DIFFICULTY_LABELS = {
   hard: 'سخت',
 };
 
+const SECTION_COLORS = [
+  'var(--gold)',
+  'var(--teal)',
+  'var(--navy-3)',
+  'var(--amber)',
+  'var(--navy-2)',
+  '#8B5CF6',
+  '#EC4899',
+];
+
 export default function ExamCreatePage() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
 
   const { create, update, changeStatus, getExam } = useExams();
-  const { items: subjects, loading: subjectsLoading } = useSubjects();
+  const { items: subjects, loading: subjectsLoading, error: subjectsError } = useSubjects();
 
   const [loadingExam, setLoadingExam] = useState(isEdit);
   const [examNotFound, setExamNotFound] = useState(false);
@@ -50,7 +60,19 @@ export default function ExamCreatePage() {
   const [publishing, setPublishing] = useState(false);
   const [errors, setErrors] = useState({});
 
-  // فرم آزمون مطابق Prototype v3
+  // بخش‌های دیتابیس به همراه تعداد سوالات فعال در هر بخش
+  const [dbSections, setDbSections] = useState([]);
+  const [loadingSections, setLoadingSections] = useState(false);
+
+  // بخش‌های انتخاب‌شده برای آزمون به همراه تعداد سوال تعیین‌شده
+  const [selectedSections, setSelectedSections] = useState([
+    { name: 'Grammar', count: 20, color: 'var(--gold)' },
+    { name: 'Vocabulary', count: 10, color: 'var(--teal)' },
+    { name: 'Reading', count: 10, color: 'var(--navy-3)' },
+    { name: 'Listening', count: 10, color: 'var(--amber)' },
+  ]);
+
+  // فرم کلی آزمون
   const [formData, setFormData] = useState({
     title: 'English Language Examination',
     description: 'امتحان زبان انگلیسی برای متقاضیان بست‌های کادری',
@@ -64,27 +86,73 @@ export default function ExamCreatePage() {
     randomize_questions: true,
     randomize_options: true,
     show_result_immediately: false,
-    sections: [
-      { name: 'Grammar', count: 20, color: 'var(--gold)' },
-      { name: 'Vocabulary', count: 10, color: 'var(--teal)' },
-      { name: 'Reading', count: 10, color: 'var(--navy-3)' },
-      { name: 'Listening', count: 10, color: 'var(--amber)' },
-    ],
   });
 
-  // سوالات متصل‌شده به آزمون
+  // سوالات انتخاب‌شده متصل به آزمون
   const [selectedQuestions, setSelectedQuestions] = useState([]);
 
   // مودال انتخاب سوال از مخزن فعال (Active in Pool)
   const [questionModalOpen, setQuestionModalOpen] = useState(false);
   const [availableQuestions, setAvailableQuestions] = useState([]);
   const [availableLoading, setAvailableLoading] = useState(false);
+
+  // فیلترهای جستجو و انتخاب سوال
   const [qSearch, setQSearch] = useState('');
+  const [qSection, setQSection] = useState(''); // '' = همه بخش‌ها
   const [qType, setQType] = useState('');
   const [qDifficulty, setQDifficulty] = useState('');
 
+  // بخش جدید برای اضافه کردن دستی
+  const [newSectionSelect, setNewSectionSelect] = useState('');
+
   // آیا آزمون در وضعیتی است که ویرایش مجاز باشد؟
   const isEditable = !isEdit || ['draft', 'under_review'].includes(examStatus);
+
+  // تنظیم subject_id اولیه در صورت خالی بودن
+  useEffect(() => {
+    if (!formData.subject_id && subjects.length > 0) {
+      setFormData((p) => ({ ...p, subject_id: String(subjects[0].id) }));
+    }
+  }, [subjects, formData.subject_id]);
+
+  // دریافت بخش‌های موجود در دیتابیس بر اساس مضمون انتخاب‌شده
+  const loadDbSections = async (subjectId) => {
+    setLoadingSections(true);
+    try {
+      const res = await api.get(`${API_BASE}/admin/exams/sections`, {
+        params: { subject_id: subjectId || undefined },
+      });
+      const list = res.data?.data || [];
+      setDbSections(list);
+
+      // اگر در حالت ایجاد هستیم و هیچ بخشی تنظیم نشده بود، بر اساس دیتابیس تنظیم شود
+      if (!isEdit && list.length > 0) {
+        // به‌روزرسانی رنگ و موجودی بخش‌های جاری
+        setSelectedSections((prev) =>
+          prev.map((s, idx) => {
+            const found = list.find((db) => db.name.toLowerCase() === s.name.toLowerCase());
+            return {
+              ...s,
+              available_active: found ? found.active_count : 0,
+              color: s.color || SECTION_COLORS[idx % SECTION_COLORS.length],
+            };
+          })
+        );
+      }
+    } catch {
+      // در صورت خطا، بدون شکستن صفحه از لیست خالی استفاده می‌شود
+      setDbSections([]);
+    } finally {
+      setLoadingSections(false);
+    }
+  };
+
+  useEffect(() => {
+    const activeSub = formData.subject_id || subjects[0]?.id;
+    if (activeSub) {
+      loadDbSections(activeSub);
+    }
+  }, [formData.subject_id, subjects]);
 
   // بارگذاری اطلاعات آزمون در حالت ویرایش
   useEffect(() => {
@@ -105,13 +173,13 @@ export default function ExamCreatePage() {
 
         setExamStatus(exam.status || 'draft');
 
-        // استخراج بخش‌ها
+        // استخراج بخش‌ها از دیتابیس
         let sections = [];
         if (exam.sections && exam.sections.length > 0) {
           sections = exam.sections.map((s, idx) => ({
             name: s.name,
-            count: s.question_count || 10,
-            color: ['var(--gold)', 'var(--teal)', 'var(--navy-3)', 'var(--amber)'][idx % 4],
+            count: Number(s.question_count) || 10,
+            color: SECTION_COLORS[idx % SECTION_COLORS.length],
           }));
         } else {
           sections = [
@@ -121,6 +189,8 @@ export default function ExamCreatePage() {
             { name: 'Listening', count: 10, color: 'var(--amber)' },
           ];
         }
+
+        setSelectedSections(sections);
 
         setFormData({
           title: exam.title || '',
@@ -135,7 +205,6 @@ export default function ExamCreatePage() {
           randomize_questions: Boolean(exam.randomize_questions),
           randomize_options: Boolean(exam.randomize_options),
           show_result_immediately: Boolean(exam.show_result_immediately),
-          sections,
         });
 
         // استخراج سوالات متصل‌شده
@@ -163,28 +232,60 @@ export default function ExamCreatePage() {
     setErrors((p) => ({ ...p, [field]: null }));
   };
 
-  const addSection = () => {
-    const name = prompt('نام بخش جدید را وارد نمایید:');
+  // افزودن بخش از بخش‌های موجود در دیتابیس یا نام دلخواه
+  const handleAddSection = (sectionName) => {
+    const name = (sectionName || prompt('نام بخش جدید را وارد نمایید:') || '').trim();
     if (!name) return;
-    const count = Number(prompt('تعداد سوالات این بخش:', '10')) || 10;
-    setFormData((p) => ({
-      ...p,
-      sections: [...p.sections, { name, count, color: 'var(--navy-2)' }],
-    }));
+
+    if (selectedSections.some((s) => s.name.toLowerCase() === name.toLowerCase())) {
+      notifyWarning(`بخش «${name}» قبلاً به آزمون اضافه شده است.`);
+      return;
+    }
+
+    const dbSec = dbSections.find((db) => db.name.toLowerCase() === name.toLowerCase());
+    const availableActive = dbSec ? dbSec.active_count : 0;
+    const initialCount = availableActive > 0 ? Math.min(10, availableActive) : 10;
+
+    setSelectedSections((prev) => [
+      ...prev,
+      {
+        name,
+        count: initialCount,
+        available_active: availableActive,
+        color: SECTION_COLORS[prev.length % SECTION_COLORS.length],
+      },
+    ]);
+    setNewSectionSelect('');
+    notifySuccess(`بخش «${name}» با موفقیت افزوده شد.`);
   };
 
-  const removeSection = (idx) => {
-    if (formData.sections.length <= 1) {
+  // تغییر تعداد سوال یک بخش
+  const handleSectionCountChange = (index, newCount) => {
+    const count = Math.max(1, Number(newCount) || 1);
+    setSelectedSections((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], count };
+      return next;
+    });
+  };
+
+  // حذف یک بخش
+  const handleRemoveSection = (idx) => {
+    if (selectedSections.length <= 1) {
       notifyWarning('حداقل یک بخش برای آزمون الزامی است.');
       return;
     }
-    setFormData((p) => ({
-      ...p,
-      sections: p.sections.filter((_, i) => i !== idx),
-    }));
+    const removed = selectedSections[idx];
+    setSelectedSections((prev) => prev.filter((_, i) => i !== idx));
+    notifySuccess(`بخش «${removed.name}» حذف گردید.`);
   };
 
-  // بارگذاری سوالات فعال بانک سوالات برای مضمون جاری
+  // مجموع کل سوالات تعیین‌شده در بخش‌ها
+  const totalQuestionsSum = useMemo(() => {
+    return selectedSections.reduce((acc, s) => acc + (Number(s.count) || 0), 0);
+  }, [selectedSections]);
+
+  // بارگذاری سوالات فعال مخزن با فیلتر بخش، جستجو، نوع و دشواری
   const loadAvailableQuestions = async () => {
     const activeSubjectId = formData.subject_id || subjects[0]?.id;
     if (!activeSubjectId) return;
@@ -195,15 +296,16 @@ export default function ExamCreatePage() {
         params: {
           subject_id: activeSubjectId,
           status: 'active', // فقط سوالات Active in Pool
+          section_name: qSection || undefined, // خالی = همه بخش‌ها
           search: qSearch || undefined,
           question_type: qType || undefined,
           difficulty: qDifficulty || undefined,
-          per_page: 50,
+          per_page: 100,
         },
       });
       const data = unwrapList(res.data);
       setAvailableQuestions(data.items || []);
-    } catch (err) {
+    } catch {
       notifyError('خطا در بارگذاری سوالات مخزن فعال.');
     } finally {
       setAvailableLoading(false);
@@ -214,21 +316,35 @@ export default function ExamCreatePage() {
     if (questionModalOpen) {
       loadAvailableQuestions();
     }
-  }, [questionModalOpen, formData.subject_id, qSearch, qType, qDifficulty]);
+  }, [questionModalOpen, formData.subject_id, qSection, qSearch, qType, qDifficulty]);
 
-  const handleAddQuestion = (q) => {
-    if (selectedQuestions.some((item) => item.id === q.id)) {
-      notifyWarning('این سوال قبلاً به آزمون اضافه شده است.');
-      return;
+  // افزودن یا حذف (Toggle) سوال
+  const handleToggleQuestion = (q) => {
+    const alreadySelected = selectedQuestions.some((item) => item.id === q.id);
+    if (alreadySelected) {
+      setSelectedQuestions((prev) => prev.filter((item) => item.id !== q.id));
+      notifySuccess(`سوال #${q.id} از لیست سوالات آزمون حذف شد.`);
+    } else {
+      setSelectedQuestions((prev) => [...prev, q]);
+      notifySuccess(`سوال #${q.id} به سوالات آزمون اضافه شد.`);
     }
-    setSelectedQuestions((prev) => [...prev, q]);
-    notifySuccess(`سوال #${q.id} به آزمون اضافه شد.`);
   };
 
-  const handleRemoveQuestion = (qId) => {
+  const handleRemoveSelectedQuestion = (qId) => {
     setSelectedQuestions((prev) => prev.filter((item) => item.id !== qId));
   };
 
+  // محاسبه تعداد سوالات انتخاب‌شده برای هر بخش
+  const selectedCountsBySection = useMemo(() => {
+    const counts = {};
+    selectedQuestions.forEach((q) => {
+      const secName = q.section_name || 'عمومی';
+      counts[secName] = (counts[secName] || 0) + 1;
+    });
+    return counts;
+  }, [selectedQuestions]);
+
+  // ساخت پی‌لود معتبر برای ارسال به سرور
   const buildPayload = () => {
     if (!subjects.length) {
       return null;
@@ -240,10 +356,9 @@ export default function ExamCreatePage() {
     }
 
     const totalMarks = Number(formData.total_marks) || 100;
-    const totalQuestions =
-      formData.sections.reduce((acc, s) => acc + (Number(s.count) || 0), 0) || 1;
+    const totalQuestions = totalQuestionsSum || 1;
 
-    const sectionsPayload = formData.sections.map((s, idx) => {
+    const sectionsPayload = selectedSections.map((s, idx) => {
       const qCount = Number(s.count) || 10;
       const marks = Math.round(((qCount / totalQuestions) * totalMarks) * 100) / 100;
       return {
@@ -284,7 +399,7 @@ export default function ExamCreatePage() {
     if (submitting || publishing) return;
 
     if (!subjects.length) {
-      notifyError('هیچ مضمونی در سامانه تعریف نشده است. لطفاً ابتدا از بخش مضامین، مضمون مربوطه را ایجاد کنید.');
+      notifyError('هیچ مضمونی در سامانه تعریف نشده است. لطفاً ابتدا از بخش مضامین حداقل یک مضمون ایجاد نمایید.');
       return;
     }
 
@@ -326,7 +441,7 @@ export default function ExamCreatePage() {
     if (submitting || publishing) return;
 
     if (!subjects.length) {
-      notifyError('هیچ مضمونی در سامانه تعریف نشده است. لطفاً ابتدا از بخش مضامین، مضمون مربوطه را ایجاد کنید.');
+      notifyError('هیچ مضمونی در سامانه تعریف نشده است.');
       return;
     }
 
@@ -416,7 +531,7 @@ export default function ExamCreatePage() {
         }
       />
 
-      <div className="max-w-[760px] space-y-4">
+      <div className="max-w-[780px] space-y-4">
         {/* هشدار وضعیت غیرقابل ویرایش در صورت وجود */}
         {!isEditable && (
           <div className="p-3.5 rounded-xl border border-amber/40 bg-amber/10 text-xs text-navy font-bold leading-relaxed">
@@ -427,6 +542,12 @@ export default function ExamCreatePage() {
         {!subjectsLoading && subjects.length === 0 && (
           <div className="p-3.5 rounded-xl border border-gold/40 bg-gold/10 text-xs text-navy font-bold leading-relaxed">
             ⚠️ توجه: هیچ مضمونی در سامانه یافت نشد. برای ایجاد آزمون، لازم است ابتدا از منوی مضامین حداقل یک مضمون ثبت شود.
+          </div>
+        )}
+
+        {subjectsError && (
+          <div className="p-3 rounded-xl border border-red/40 bg-red/10 text-xs text-red font-medium">
+            {subjectsError}
           </div>
         )}
 
@@ -442,7 +563,7 @@ export default function ExamCreatePage() {
 
           <Field label="مضمون مربوطه" required error={errors.subject_id}>
             <Select
-              value={formData.subject_id || (subjects[0]?.id ? String(subjects[0].id) : '')}
+              value={formData.subject_id}
               onChange={(e) => handleChange('subject_id', e.target.value)}
               disabled={!isEditable || subjects.length === 0}
             >
@@ -520,50 +641,111 @@ export default function ExamCreatePage() {
             </Field>
           </FieldRow>
 
-          {/* بخش‌های آزمون */}
-          <div className="section-title flex items-center justify-between">
-            <span>بخش‌های آزمون</span>
+          {/* بخش‌های آزمون و تعیین تعداد سوالات */}
+          <div className="section-title flex items-center justify-between border-t border-line pt-3">
+            <span>بخش‌های آزمون (قابل انتخاب و تنظیم تعداد سوال)</span>
             <span className="text-xs text-ink-soft font-normal">
-              مجموع سوالات بخش‌ها:{' '}
-              <b>
-                {formData.sections.reduce((acc, s) => acc + (Number(s.count) || 0), 0)}
-              </b>
+              مجموع کل سوالات بخش‌ها: <b className="text-navy font-mono text-sm">{totalQuestionsSum}</b>
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-2.5">
-            {formData.sections.map((sec, idx) => (
-              <div
-                key={idx}
-                className="stat p-3 rounded-xl border border-line bg-panel relative overflow-hidden"
-                style={{ '--stat-c': sec.color }}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-ink-soft">{sec.name}</div>
-                  {isEditable && formData.sections.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeSection(idx)}
-                      className="text-red/60 hover:text-red text-xs px-1"
-                      title="حذف این بخش"
-                    >
-                      ×
-                    </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {selectedSections.map((sec, idx) => {
+              const dbMatch = dbSections.find(
+                (db) => db.name.toLowerCase() === sec.name.toLowerCase()
+              );
+              const availableActive = dbMatch ? dbMatch.active_count : (sec.available_active ?? 0);
+              const isOverCapacity = availableActive > 0 && sec.count > availableActive;
+
+              return (
+                <div
+                  key={idx}
+                  className="p-3.5 rounded-xl border border-line bg-panel relative overflow-hidden space-y-2 shadow-sm"
+                  style={{ borderRightWidth: '4px', borderRightColor: sec.color }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-navy text-xs">{sec.name}</span>
+                    {isEditable && selectedSections.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSection(idx)}
+                        className="text-red/60 hover:text-red text-xs px-1 font-bold"
+                        title="حذف این بخش"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] text-ink-soft whitespace-nowrap">تعداد سؤال:</label>
+                    <input
+                      type="number"
+                      min="1"
+                      className="w-24 px-2 py-1 rounded-md border border-line text-xs font-mono font-bold text-navy bg-panel-2"
+                      value={sec.count}
+                      disabled={!isEditable}
+                      onChange={(e) => handleSectionCountChange(idx, e.target.value)}
+                    />
+                    <span className="text-[11px] text-ink-soft">
+                      (موجود فعال: <b>{availableActive}</b>)
+                    </span>
+                  </div>
+
+                  {isOverCapacity && (
+                    <div className="text-[10.5px] text-amber font-medium">
+                      ⚠️ تعداد سؤال انتخابی ({sec.count}) از سؤالات فعال موجود در مخزن ({availableActive}) بیشتر است.
+                    </div>
                   )}
                 </div>
-                <div className="text-base font-bold text-navy mt-1">{sec.count} سوال</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
+          {/* افزودن بخش جدید از دیتابیس */}
           {isEditable && (
-            <Button type="button" variant="outline" size="sm" onClick={addSection}>
-              + افزودن بخش جدید
-            </Button>
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
+              <Select
+                value={newSectionSelect}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '__custom__') {
+                    handleAddSection();
+                  } else if (val) {
+                    handleAddSection(val);
+                  }
+                }}
+                className="max-w-xs text-xs"
+              >
+                <option value="">+ انتخاب بخش از دیتابیس...</option>
+                {dbSections
+                  .filter(
+                    (db) =>
+                      !selectedSections.some(
+                        (s) => s.name.toLowerCase() === db.name.toLowerCase()
+                      )
+                  )
+                  .map((db) => (
+                    <option key={db.name} value={db.name}>
+                      {db.name} (فعال در مخزن: {db.active_count})
+                    </option>
+                  ))}
+                <option value="__custom__">+ افزودن بخش دلخواه جدید...</option>
+              </Select>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleAddSection()}
+              >
+                + نام بخش دلخواه
+              </Button>
+            </div>
           )}
 
           {/* تنظیمات پیشرفته */}
-          <div className="section-title">تنظیمات پیشرفته</div>
+          <div className="section-title border-t border-line pt-3">تنظیمات پیشرفته</div>
           <FieldRow cols={3}>
             <Field label="حرکت به سوال قبلی">
               <Select
@@ -601,31 +783,51 @@ export default function ExamCreatePage() {
 
           {/* سوالات متصل‌شده به آزمون از مخزن فعال */}
           <div className="border-t border-line pt-4 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <div className="font-bold text-navy text-sm">
-                  سوالات متصل به آزمون (Active in Pool)
+                  سوالات انتخابی از مخزن فعال (Active in Pool)
                 </div>
                 <div className="text-xs text-ink-soft mt-0.5">
-                  تعداد انتخاب‌شده: <b>{selectedQuestions.length}</b> سوال | مجموع نمرات:{' '}
+                  انتخاب‌شده: <b>{selectedQuestions.length}</b> سوال | مجموع نمرات:{' '}
                   <b>{calculatedTotalScore}</b> نمره
                 </div>
               </div>
               {isEditable && (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="gold"
                   size="sm"
                   onClick={() => setQuestionModalOpen(true)}
                 >
-                  + انتخاب سوالات از مخزن فعال
+                  🔍 انتخاب سوالات از مخزن فعال
                 </Button>
               )}
             </div>
 
+            {/* نشانگر هماهنگی سوالات انتخابی با بخش‌های تعریف‌شده */}
+            <div className="flex items-center gap-2 flex-wrap text-[11px] text-ink-soft bg-panel-2 p-2 rounded-lg border border-line">
+              <span className="font-bold text-navy">وضعیت انتخاب به تفکیک بخش:</span>
+              {selectedSections.map((sec) => {
+                const count = selectedCountsBySection[sec.name] || 0;
+                const target = Number(sec.count) || 0;
+                const isMatch = count === target;
+                return (
+                  <span
+                    key={sec.name}
+                    className={`px-2 py-0.5 rounded-md font-mono ${
+                      isMatch ? 'bg-teal/15 text-teal font-bold' : 'bg-panel border border-line text-navy'
+                    }`}
+                  >
+                    {sec.name}: {count} / {target}
+                  </span>
+                );
+              })}
+            </div>
+
             {selectedQuestions.length === 0 ? (
               <div className="p-4 rounded-xl border border-dashed border-line text-center text-xs text-ink-soft">
-                هنوز سوالی از مخزن فعال به این آزمون متصل نشده است.
+                هنوز سوالی از مخزن فعال انتخاب نشده است. با کلیک بر روی دکمه بالا می‌توانید سوالات مورد نظر را از مخزن انتخاب نمایید.
               </div>
             ) : (
               <div className="border border-line rounded-xl overflow-hidden max-h-60 overflow-y-auto">
@@ -636,7 +838,7 @@ export default function ExamCreatePage() {
                       <th className="p-2 text-right">متن سوال</th>
                       <th className="p-2 text-right">بخش</th>
                       <th className="p-2 text-right">نمره</th>
-                      {isEditable && <th className="p-2 text-center w-12">حذف</th>}
+                      {isEditable && <th className="p-2 text-center w-12">لغو</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
@@ -654,9 +856,9 @@ export default function ExamCreatePage() {
                           <td className="p-2 text-center">
                             <button
                               type="button"
-                              onClick={() => handleRemoveQuestion(q.id)}
+                              onClick={() => handleRemoveSelectedQuestion(q.id)}
                               className="text-red/70 hover:text-red font-bold px-1"
-                              title="حذف از آزمون"
+                              title="لغو انتخاب"
                             >
                               ✕
                             </button>
@@ -702,13 +904,29 @@ export default function ExamCreatePage() {
         size="xl"
       >
         <div className="space-y-3">
+          {/* نوار فیلتر بالای سوالات با فیلتر مشخص بخش و گزینه «همه» */}
           <FilterBar>
+            {/* الف و ب: فیلتر بخش با گزینه «همه» در بالای سوالات */}
+            <FilterSelect
+              value={qSection}
+              onChange={(e) => setQSection(e.target.value)}
+              className="min-w-[140px]"
+            >
+              <option value="">بخش: همه</option>
+              {dbSections.map((sec) => (
+                <option key={sec.name} value={sec.name}>
+                  {sec.name} ({sec.active_count} فعال)
+                </option>
+              ))}
+            </FilterSelect>
+
             <FilterInput
               value={qSearch}
               onChange={(e) => setQSearch(e.target.value)}
               placeholder="جستجو در متن سوال..."
               className="max-w-xs"
             />
+
             <FilterSelect value={qType} onChange={(e) => setQType(e.target.value)}>
               <option value="">نوع سوال: همه</option>
               <option value="single">چهارگزینه‌ای</option>
@@ -716,6 +934,7 @@ export default function ExamCreatePage() {
               <option value="true_false">صحیح/غلط</option>
               <option value="short_answer">پاسخ کوتاه</option>
             </FilterSelect>
+
             <FilterSelect value={qDifficulty} onChange={(e) => setQDifficulty(e.target.value)}>
               <option value="">دشواری: همه</option>
               <option value="easy">آسان</option>
@@ -724,6 +943,7 @@ export default function ExamCreatePage() {
             </FilterSelect>
           </FilterBar>
 
+          {/* جدول سوالات با انتخاب و لغو انتخاب (Toggle) */}
           <div className="border border-line rounded-xl overflow-hidden max-h-80 overflow-y-auto">
             {availableLoading ? (
               <div className="p-8 text-center text-xs text-ink-soft">
@@ -731,7 +951,9 @@ export default function ExamCreatePage() {
               </div>
             ) : availableQuestions.length === 0 ? (
               <div className="p-8 text-center text-xs text-ink-soft">
-                هیچ سوال فعالی در این مضمون یافت نشد. سوالات ابتدا باید در بانک سوالات تایید و به مخزن اضافه شوند.
+                {qSection
+                  ? `هیچ سوال فعالی در بخش «${qSection}» در مخزن یافت نشد.`
+                  : 'هیچ سوال فعالی در این مضمون یافت نشد. سوالات ابتدا باید در بانک سوالات تایید و به مخزن اضافه شوند.'}
               </div>
             ) : (
               <table className="w-full text-xs">
@@ -742,7 +964,7 @@ export default function ExamCreatePage() {
                     <th className="p-2.5 text-right">نوع</th>
                     <th className="p-2.5 text-right">دشواری</th>
                     <th className="p-2.5 text-right">نمره</th>
-                    <th className="p-2.5 text-center w-24">عملیات</th>
+                    <th className="p-2.5 text-center w-28">انتخاب / لغو</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -753,20 +975,27 @@ export default function ExamCreatePage() {
                         <td className="p-2.5 font-medium text-navy max-w-sm truncate">
                           {q.question_text}
                         </td>
-                        <td className="p-2.5 text-ink-soft">{q.section_name}</td>
+                        <td className="p-2.5 text-ink-soft font-semibold">{q.section_name}</td>
                         <td className="p-2.5">{TYPE_LABELS[q.question_type] || q.question_type}</td>
                         <td className="p-2.5">{DIFFICULTY_LABELS[q.difficulty] || q.difficulty}</td>
                         <td className="p-2.5 font-mono font-bold text-navy">{q.score ?? 1}</td>
                         <td className="p-2.5 text-center">
                           {isSelected ? (
-                            <Badge tone="teal">انتخاب‌شده</Badge>
+                            <Button
+                              size="sm"
+                              variant="teal"
+                              onClick={() => handleToggleQuestion(q)}
+                              title="کلیک جهت لغو انتخاب"
+                            >
+                              ✓ انتخاب‌شده
+                            </Button>
                           ) : (
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleAddQuestion(q)}
+                              onClick={() => handleToggleQuestion(q)}
                             >
-                              + افزودن
+                              + انتخاب
                             </Button>
                           )}
                         </td>
@@ -778,9 +1007,12 @@ export default function ExamCreatePage() {
             )}
           </div>
 
-          <div className="flex justify-end pt-2">
+          <div className="flex items-center justify-between pt-2 border-t border-line text-xs">
+            <div className="text-ink-soft">
+              تعداد سوالات انتخاب‌شده: <b className="text-navy">{selectedQuestions.length}</b> سوال
+            </div>
             <Button variant="primary" onClick={() => setQuestionModalOpen(false)}>
-              تأیید و بستن ({selectedQuestions.length} سوال انتخابی)
+              تأیید و بازگشت به فرم آزمون
             </Button>
           </div>
         </div>

@@ -60,6 +60,63 @@ class ExamController extends Controller
     }
 
     /**
+     * دریافت لیست بخش‌های موجود در دیتابیس (section_name) همراه با تعداد سوالات فعال در مخزن.
+     */
+    public function getAvailableSections(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $subjectId = $request->subject_id;
+
+        $query = \App\Models\Question::query();
+        if ($subjectId) {
+            $query->where('subject_id', $subjectId);
+        }
+
+        $rawSections = $query->select('section_name')
+            ->selectRaw("COUNT(*) as total_questions")
+            ->selectRaw("SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_questions")
+            ->selectRaw("SUM(CASE WHEN status IN ('approved', 'active') THEN 1 ELSE 0 END) as approved_and_active_questions")
+            ->whereNotNull('section_name')
+            ->where('section_name', '!=', '')
+            ->groupBy('section_name')
+            ->orderBy('section_name')
+            ->get();
+
+        $sections = [];
+        $existingNames = [];
+
+        foreach ($rawSections as $sec) {
+            $name = trim($sec->section_name);
+            if (!empty($name)) {
+                $sections[] = [
+                    'name'             => $name,
+                    'active_count'     => (int) $sec->active_questions,
+                    'total_count'      => (int) $sec->total_questions,
+                    'approved_count'   => (int) $sec->approved_and_active_questions,
+                ];
+                $existingNames[] = mb_strtolower($name);
+            }
+        }
+
+        // بخش‌های استاندارد پروتوتایپ در صورتی که در دیتابیس هنوز سوالی برای آنها ثبت نشده باشد
+        $standardDefaults = ['Grammar', 'Vocabulary', 'Reading', 'Listening'];
+        foreach ($standardDefaults as $def) {
+            if (!in_array(mb_strtolower($def), $existingNames)) {
+                $sections[] = [
+                    'name'           => $def,
+                    'active_count'   => 0,
+                    'total_count'    => 0,
+                    'approved_count' => 0,
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'data'    => $sections,
+        ]);
+    }
+
+    /**
      * نمایش یک آزمون با جزئیات کامل.
      */
     public function show(Exam $exam)

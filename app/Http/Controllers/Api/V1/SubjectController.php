@@ -29,14 +29,14 @@ class SubjectController extends Controller
     {
         Gate::authorize('viewAny', Subject::class);
 
-        $user = Auth::guard('admin')->user();
+        $user = Auth::guard('admin')->user() ?: Auth::user();
 
         $query = Subject::with('faculty')
             ->when($request->faculty_id, fn ($q) => $q->where('faculty_id', $request->faculty_id))
             ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
             ->orderBy('name');
 
-        if (!in_array($user->role?->name, ['Super Admin', 'Exam Administrator'])) {
+        if ($user && !in_array($user->role?->name, ['Super Admin', 'Exam Administrator'])) {
             $allowedIds = $user->subjectAccess()->pluck('subject_id');
             $query->whereIn('id', $allowedIds);
         }
