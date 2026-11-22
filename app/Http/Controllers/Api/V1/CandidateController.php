@@ -500,10 +500,54 @@ public function entryCard(Candidate $candidate): JsonResponse
     ]);
 }
 
+    /**
+     * دریافت لیست کارت‌های ورود متقاضیان برای چاپ گروهی.
+     */
+    public function allEntryCards(): JsonResponse
+    {
+        $assignments = CandidateAssignment::with([
+            'candidate',
+            'exam:id,title',
+            'shift:id,name,start_time',
+            'lab:id,name',
+            'computer:id,computer_code',
+        ])
+        ->whereNotNull('candidate_id')
+        ->latest('id')
+        ->limit(100)
+        ->get();
 
+        $data = $assignments->map(function ($a) {
+            return [
+                'id'       => 'card-' . $a->id,
+                'name'     => $a->candidate?->name ?? 'متقاضی',
+                'code'     => $a->candidate?->candidate_code ?? 'KND-' . $a->id,
+                'lab'      => ($a->lab?->name ?? 'Lab') . '/' . ($a->computer?->computer_code ?? 'PC-01'),
+                'time'     => $a->shift?->name ?? 'شیفت صبح',
+                'exam'     => $a->exam?->title ?? 'امتحان زبان انگلیسی',
+                'qr_token' => md5(($a->candidate?->candidate_code ?? 'KND') . ($a->id ?? 1)),
+            ];
+        });
 
+        // اگر هنوز تخصیصی در دیتابیس ثبت نشده بود، از جدول candidates لیست متقاضیان را بگیریم
+        if ($data->isEmpty()) {
+            $candidates = Candidate::latest('id')->limit(50)->get();
+            $data = $candidates->map(function ($c) {
+                return [
+                    'id'       => 'card-cand-' . $c->id,
+                    'name'     => $c->name,
+                    'code'     => $c->candidate_code,
+                    'lab'      => 'Lab1/PC-01',
+                    'time'     => 'شیفت آزمون',
+                    'exam'     => 'امتحان عمومی پوهنتون کندز',
+                    'qr_token' => md5($c->candidate_code),
+                ];
+            });
+        }
 
-
-
-
+        return response()->json([
+            'success' => true,
+            'data'    => $data,
+        ]);
+    }
 }

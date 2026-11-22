@@ -40,6 +40,18 @@ class IncidentController extends Controller
             $query->where('status', $request->status);
         }
 
+        // فیلتر بر اساس نوع حادثه (مثلاً anti_cheat)
+        if ($request->filled('incident_type')) {
+            $query->where('incident_type', $request->incident_type);
+        } elseif ($request->filled('type')) {
+            $query->where('incident_type', $request->type);
+        }
+
+        // فیلتر بر اساس شدت حادثه
+        if ($request->filled('severity')) {
+            $query->where('severity', $request->severity);
+        }
+
         // فیلتر بر اساس متقاضی
         if ($request->filled('candidate_id')) {
             $query->where('candidate_id', $request->candidate_id);
@@ -55,7 +67,18 @@ class IncidentController extends Controller
             $query->whereDate('occurred_at', $request->date);
         }
 
-        $incidents = $query->orderByDesc('occurred_at')->paginate(20);
+        // جستجو در عنوان، شرح یا نام داوطلب
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function ($sub) use ($s) {
+                $sub->where('title', 'like', "%{$s}%")
+                    ->orWhere('description', 'like', "%{$s}%")
+                    ->orWhereHas('candidate', fn($c) => $c->where('name', 'like', "%{$s}%")->orWhere('candidate_code', 'like', "%{$s}%"));
+            });
+        }
+
+        $perPage = min(max((int) ($request->per_page ?? 20), 1), 100);
+        $incidents = $query->orderByDesc('occurred_at')->paginate($perPage);
 
         return response()->json([
             'success' => true,

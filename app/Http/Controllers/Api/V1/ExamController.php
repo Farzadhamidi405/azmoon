@@ -323,4 +323,81 @@ class ExamController extends Controller
             'message' => 'آزمون با موفقیت حذف شد.',
         ]);
     }
+
+    /**
+     * دریافت وضعیت Question Pool آزمون.
+     */
+    public function getPool(Exam $exam): \Illuminate\Http\JsonResponse
+    {
+        Gate::authorize('view', $exam);
+
+        $exam->load('sections.questionPool');
+
+        $data = $exam->sections->map(function ($section) use ($exam) {
+            $poolCount = \App\Models\Question::where('subject_id', $exam->subject_id)
+                ->where('status', 'approved')
+                ->where('section_name', $section->name)
+                ->count();
+
+            if ($poolCount === 0) {
+                $poolCount = \App\Models\Question::where('subject_id', $exam->subject_id)
+                    ->where('status', 'approved')
+                    ->count();
+            }
+
+            return [
+                'id'             => $section->id,
+                'section'        => $section->name,
+                'total'          => max($poolCount, (int) $section->question_count),
+                'selected'       => (int) $section->question_count,
+                'randomize'      => (bool) ($exam->randomize_options ?? true),
+                'total_marks'    => (float) $section->total_marks,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data'    => $data,
+        ]);
+    }
+
+    /**
+     * به‌روزرسانی تنظیمات Question Pool آزمون.
+     */
+    public function updatePool(Request $request, Exam $exam): \Illuminate\Http\JsonResponse
+    {
+        Gate::authorize('update', $exam);
+
+        $validated = $request->validate([
+            'sections'               => 'required|array',
+            'sections.*.id'          => 'required|exists:exam_sections,id',
+            'sections.*.selected'    => 'required|integer|min:1',
+            'randomize_options'      => 'nullable|boolean',
+            'randomize_questions'    => 'nullable|boolean',
+        ]);
+
+        DB::transaction(function () use ($validated, $exam) {
+            foreach ($validated['sections'] as $item) {
+                $exam->sections()->where('id', $item['id'])->update([
+                    'question_count' => (int) $item['selected'],
+                ]);
+            }
+
+            $examUpdates = [];
+            if (isset($validated['randomize_options'])) {
+                $examUpdates['randomize_options'] = (bool) $validated['randomize_options'];
+            }
+            if (isset($validated['randomize_questions'])) {
+                $examUpdates['randomize_questions'] = (bool) $validated['randomize_questions'];
+            }
+            if (!empty($examUpdates)) {
+                $exam->update($examUpdates);
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تنظیمات Question Pool با موفقیت ذخیره شد.',
+        ]);
+    }
 }

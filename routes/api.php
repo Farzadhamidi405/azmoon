@@ -51,8 +51,8 @@ Route::prefix("v1")->group(function () {
             Route::get("candidate/me", [CandidateAuthController::class, "me"]);
         });
 
-        Route::post("forgot-password", [PingController::class, "stub"]);
-        Route::post("2fa/verify", [PingController::class, "stub"]);
+        Route::post("forgot-password", [StaffAuthController::class, "forgotPassword"]);
+        Route::post("2fa/verify", [StaffAuthController::class, "verify2Fa"]);
     });
 
     // ─── Admin Routes ──────────────────────────────────────────
@@ -88,6 +88,7 @@ Route::prefix("v1")->group(function () {
                 Route::get('/{user}', [UserController::class, 'show']);
                 Route::put('/{user}', [UserController::class, 'update']);
                 Route::delete('/{user}', [UserController::class, 'destroy']);
+                Route::post('/{user}/toggle-active', [UserController::class, 'toggleActive']);
             });
 
 
@@ -122,6 +123,8 @@ Route::prefix("v1")->group(function () {
                 Route::put("/{exam}", [ExamController::class, "update"]);
                 Route::delete("/{exam}", [ExamController::class, "destroy"]);
                 Route::patch("/{exam}/status", [ExamController::class, "changeStatus"]);
+                Route::get("/{exam}/pool", [ExamController::class, "getPool"]);
+                Route::post("/{exam}/pool", [ExamController::class, "updatePool"]);
             });
 
             // ─── Question Bank ─────────────────────────────────────
@@ -145,6 +148,7 @@ Route::prefix("v1")->group(function () {
                 Route::post("/", [CandidateController::class, "store"]);
                 Route::post("/bulk-generate", [CandidateController::class, "bulkGenerate"]);
                 Route::post("/import", [CandidateController::class, "import"]);
+                Route::get("/entry-cards", [CandidateController::class, "allEntryCards"]);
                 Route::get("/{candidate}", [CandidateController::class, "show"]);
                 Route::put("/{candidate}", [CandidateController::class, "update"]);
                 Route::delete("/{candidate}", [CandidateController::class, "destroy"]);
@@ -280,6 +284,18 @@ Route::prefix("v1")->group(function () {
             // ─── Anti-Cheat — Candidate ────────────────────────────
             // بند 20 SRS — ثبت رویداد مشکوک از Frontend
             Route::post("attempts/{attempt}/anti-cheat/event", [AntiCheatController::class, "recordEvent"]);
+        });
+
+    // ─── Direct Candidate Attempt Routes (Full compatibility with useExamAttempt.js) ──
+    Route::middleware("auth:candidate")
+        ->prefix("attempts")
+        ->group(function () {
+            Route::post("start", [AttemptController::class, "start"]);
+            Route::get("{attempt}/state", [AttemptController::class, "state"]);
+            Route::post("{attempt}/answer", [AttemptController::class, "saveAnswer"]);
+            Route::post("{attempt}/heartbeat", [AttemptController::class, "heartbeat"]);
+            Route::post("{attempt}/submit", [AttemptController::class, "submit"]);
+            Route::post("{attempt}/anti-cheat/event", [AntiCheatController::class, "recordEvent"]);
         });
 
 

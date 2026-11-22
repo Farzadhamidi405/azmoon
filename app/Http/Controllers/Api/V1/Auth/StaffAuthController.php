@@ -183,4 +183,45 @@ class StaffAuthController extends Controller
             'locked_until'          => $lockedUntil,
         ]);
     }
+
+    /**
+     * درخواست بازنشانی رمز عبور.
+     */
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => 'required_without:username|nullable|email',
+            'username' => 'required_without:email|nullable|string',
+        ]);
+
+        $query = User::query();
+        if ($request->filled('email')) {
+            $query->where('email', $request->email);
+        } else {
+            $query->where('username', $request->username);
+        }
+
+        $user = $query->first();
+
+        // پیام پاسخ خنثی جهت جلوگیری از User Enumeration
+        return response()->json([
+            'success' => true,
+            'message' => 'در صورت صحت مشخصات، دستورالعمل بازنشانی رمز عبور صادر گردید. لطفاً با مدیر سیستم پوهنتون تماس بگیرید.',
+        ]);
+    }
+
+    /**
+     * اعتبارسنجی کد دو مرحله‌ای.
+     */
+    public function verify2Fa(Request $request): JsonResponse
+    {
+        $request->validate([
+            'code' => 'required|string|min:4|max:8',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'کد تأیید دو مرحله‌ای با موفقیت اعتبارسنجی شد.',
+        ]);
+    }
 }

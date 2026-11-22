@@ -192,4 +192,49 @@ class UserController extends Controller
             'message' => 'کاربر با موفقیت غیرفعال شد.',
         ]);
     }
+
+    /**
+     * تغییر وضعیت فعال/غیرفعال‌بودن کاربر (Toggle Active).
+     */
+    public function toggleActive(User $user): JsonResponse
+    {
+        Gate::authorize('update', $user);
+
+        // Super Admin نمی‌تواند وضعیت خودش را تغییر دهد
+        if ($user->id === request()->user()->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'شما نمی‌توانید وضعیت حساب کاربری خودتان را تغییر دهید.',
+            ], 422);
+        }
+
+        $oldStatus = (bool) $user->is_active;
+        $newStatus = !$oldStatus;
+
+        DB::transaction(function () use ($user, $oldStatus, $newStatus) {
+            $user->update(['is_active' => $newStatus]);
+
+            DB::table('audit_logs')->insert([
+                'user_id'     => request()->user()->id,
+                'role'        => request()->user()->role?->name,
+                'action'      => $newStatus ? 'User:activated' : 'User:deactivated',
+                'module'      => 'users',
+                'target_type' => 'User',
+                'target_id'   => $user->id,
+                'old_value'   => json_encode(['is_active' => $oldStatus]),
+                'new_value'   => json_encode(['is_active' => $newStatus]),
+                'ip_address'  => request()->ip(),
+                'user_agent'  => request()->userAgent(),
+                'created_at'  => now(),
+            ]);
+        });
+
+        $user->load('role:id,name');
+
+        return response()->json([
+            'success' => true,
+            'message' => $newStatus ? 'کاربر با موفقیت فعال شد.' : 'کاربر با موفقیت غیرفعال شد.',
+            'data'    => $user->makeHidden(['two_factor_secret']),
+        ]);
+    }
 }
