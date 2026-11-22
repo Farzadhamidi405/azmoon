@@ -240,4 +240,118 @@ class QuestionApprovalTest extends TestCase
 
         $response->assertStatus(403);
     }
+
+    public function test_rejection_requires_valid_reason(): void
+    {
+        $question = $this->createQuestion('under_review');
+
+        // ارسال درخواست رد سوال بدون ثبت دلیل رد باید با خطای 422 مواجه شود
+        $response = $this->actingAs($this->reviewer)
+            ->patchJson("/api/v1/admin/questions/{$question->id}/status", [
+                'status' => 'draft',
+                'rejection_reason' => '',
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['rejection_reason']);
+
+        // بررسی اینکه سوال تغییر نیافته است
+        $question->refresh();
+        $this->assertEquals('under_review', $question->status);
+    }
+
+    public function test_cannot_approve_question_in_wrong_status(): void
+    {
+        // سوال با وضعیت draft نباید مستقیماً تأیید شود
+        $draftQ = $this->createQuestion('draft');
+
+        $response = $this->actingAs($this->reviewer)
+            ->patchJson("/api/v1/admin/questions/{$draftQ->id}/status", [
+                'status' => 'approved',
+            ]);
+
+        // به دلیل اینکه کاربر Reviewer اجازه بررسی سوال draft را ندارد، 403 بازگردانده می‌شود
+        $this->assertContains($response->status(), [403, 422]);
+        $draftQ->refresh();
+        $this->assertEquals('draft', $draftQ->status);
+    }
+
+    public function test_tabs_counts_and_table_update_correctly_after_approval_and_rejection(): void
+    {
+        $q1 = $this->createQuestion('under_review');
+        $q2 = $this->createQuestion('under_review');
+
+        // بررسی شمارش اولیه
+        $initRes = $this->actingAs($this->reviewer)
+            ->getJson('/api/v1/admin/questions?status=under_review');
+        $initRes->assertOk()
+            ->assertJsonPath('counts.under_review', 2)
+            ->assertJsonPath('counts.approved', 0)
+            ->assertJsonPath('counts.draft', 0);
+
+        // ۱. تأیید سوال اول
+        $this->actingAs($this->reviewer)
+            ->patchJson("/api/v1/admin/questions/{$q1->id}/status", [
+                'status' => 'approved',
+            ])->assertOk();
+
+        // ۲. رد سوال دوم
+        $this->actingAs($this->reviewer)
+            ->patchJson("/api/v1/admin/questions/{$q2->id}/status", [
+                'status' => 'draft',
+                'rejection_reason' => 'سوال نیاز به بازبینی گزینه‌ها دارد.',
+            ])->assertOk();
+
+        // ۳. بررسی شمارش جدید تب‌ها و لیست
+        $afterRes = $this->actingAs($this->reviewer)
+            ->getJson('/api/v1/admin/questions?status=under_review');
+
+        $afterRes->assertOk()
+            ->assertJsonPath('counts.under_review', 0)
+            ->assertJsonPath('counts.approved', 1)
+            ->assertJsonPath('counts.draft', 1);
+
+        // جدول under_review اکنون باید خالی باشد
+        $this->assertEmpty($afterRes->json('data.data'));
+
+        // سوال تأییدشده باید در تب approved قرار گیرد
+        $approvedRes = $this->actingAs($this->reviewer)
+            ->getJson('/api/v1/admin/questions?status=approved');
+        $approvedRes->assertOk();
+        $this->assertCount(1, $approvedRes->json('data.data'));
+        $this->assertEquals($q1->id, $approvedRes->json('data.data.0.id'));
+
+        // سوال ردشده باید در تب draft قرار گیرد همراه با دلیل رد
+        $draftRes = $this->actingAs($this->reviewer)
+            ->getJson('/api/v1/admin/questions?status=draft');
+        $draftRes->assertOk();
+        $this->assertCount(1, $draftRes->json('data.data'));
+        $this->assertEquals($q2->id, $draftRes->json('data.data.0.id'));
+        $this->assertEquals('سوال نیاز به بازبینی گزینه‌ها دارد.', $draftRes->json('data.data.0.rejection_reason'));
+    }
+
+    public function test_status_persists_across_fresh_queries_and_reload(): void
+    {
+        $q = $this->createQuestion('under_review');
+
+        // تأیید سوال
+        $this->actingAs($this->reviewer)
+            ->patchJson("/api/v1/admin/questions/{$q->id}/status", [
+                'status' => 'approved',
+            ])->assertOk();
+
+        // بازخوانی کامل از دیتابیس مجزا (شبیه‌ساز Refresh)
+        $freshQ = Question::find($q->id);
+        $this->assertNotNull($freshQ);
+        $this->assertEquals('approved', $freshQ->status);
+        $this->assertEquals($this->reviewer->id, $freshQ->reviewed_by);
+        $this->assertNull($freshQ->rejection_reason);
+
+        // واکشی مجدد از API شبیه‌ساز Refresh مرورگر
+        $apiRes = $this->actingAs($this->reviewer)
+            ->getJson("/api/v1/admin/questions/{$q->id}");
+        $apiRes->assertOk()
+            ->assertJsonPath('data.status', 'approved')
+            ->assertJsonPath('data.reviewed_by.id', $this->reviewer->id);
+    }
 }

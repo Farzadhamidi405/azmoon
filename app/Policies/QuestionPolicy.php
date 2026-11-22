@@ -21,7 +21,7 @@ class QuestionPolicy
      */
     private function isFullAccess(User $user): bool
     {
-        return in_array($user->role->name, ['Super Admin', 'Exam Administrator']);
+        return in_array($user->role?->name, ['Super Admin', 'Exam Administrator']);
     }
 
     /**
@@ -29,7 +29,7 @@ class QuestionPolicy
      */
     private function isQuestionManager(User $user): bool
     {
-        return $user->role->name === 'Question Manager';
+        return $user->role?->name === 'Question Manager';
     }
 
     /**
@@ -37,7 +37,7 @@ class QuestionPolicy
      */
     private function isReviewer(User $user): bool
     {
-        return $user->role->name === 'Reviewer';
+        return $user->role?->name === 'Reviewer';
     }
 
     /**

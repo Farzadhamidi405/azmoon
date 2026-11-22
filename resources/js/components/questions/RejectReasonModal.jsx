@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Modal, Textarea } from '../ui/index.js';
 
 export default function RejectReasonModal({
@@ -10,6 +10,13 @@ export default function RejectReasonModal({
 }) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setReason('');
+      setError('');
+    }
+  }, [open, question?.id]);
 
   if (!question) return null;
 
@@ -43,7 +50,7 @@ export default function RejectReasonModal({
     >
       <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
         <div className="p-3 rounded-xl bg-red/10 border border-red/30 text-red leading-relaxed">
-          سوال شماره <strong className="font-mono">#{question.id}</strong> به وضعیت «رد شده» منتقل می‌شود و طراح سوال می‌تواند بر اساس توضیح شما آن را ویرایش و مجدداً ارسال نماید.
+          سوال شماره <strong className="font-mono">#{question.id}</strong> رد شده و به وضعیت «پیش‌نویس (Draft)» بازمی‌گردد تا طراح سوال بتواند بر اساس بازخورد شما آن را اصلاح و مجدداً برای بررسی ارسال کند.
         </div>
 
         <div className="space-y-1">

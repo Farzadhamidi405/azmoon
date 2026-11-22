@@ -74,7 +74,9 @@ export function canChangeQuestionStatus(user, question) {
   if (hasRole(user, ROLES.QUESTION_MANAGER)) {
     return isOwner(user, question) && question.status === 'draft';
   }
-  if (hasRole(user, ROLES.REVIEWER)) return question.status === 'under_review';
+  if (hasRole(user, ROLES.REVIEWER)) {
+    return ['under_review', 'approved'].includes(question.status);
+  }
   return false;
 }
 export function canApproveQuestions(user) {

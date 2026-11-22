@@ -89,9 +89,6 @@ export default function useQuestions(filters = {}) {
   const changeStatus = async (id, status, extra = {}) => {
     const res = await api.patch(`${API_BASE}/admin/questions/${id}/status`, { status, ...extra });
     const updated = unwrapItem(res.data);
-    if (updated && updated.id) {
-      setItems((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
-    }
     await fetchQuestions();
     return updated;
   };

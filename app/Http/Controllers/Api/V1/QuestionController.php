@@ -492,14 +492,23 @@ class QuestionController extends Controller
 
         $updateData = ['status' => $newStatus];
 
-        // در صورت رد سوال (under_review -> draft)، ثبت دلیل رد و Reviewer
+        // در صورت رد سوال (under_review -> draft)، ثبت الزامی دلیل رد و ثبت بازبین
         if ($oldStatus === 'under_review' && $newStatus === 'draft') {
+            $request->validate([
+                'rejection_reason' => ['required', 'string', 'min:3', 'max:1000'],
+            ], [
+                'rejection_reason.required' => 'ثبت دلیل رد سوال الزامی است.',
+                'rejection_reason.min'      => 'دلیل رد سوال باید حداقل ۳ حرف باشد.',
+            ]);
+
             $updateData['reviewed_by'] = Auth::id();
-            if ($request->filled('rejection_reason')) {
-                $updateData['rejection_reason'] = $request->rejection_reason;
-            }
+            $updateData['rejection_reason'] = $request->rejection_reason;
         } elseif ($newStatus === 'approved') {
+            // در صورت تأیید سوال (under_review -> approved)، ثبت بازبین و پاکسازی دلیل رد
             $updateData['reviewed_by'] = Auth::id();
+            $updateData['rejection_reason'] = null;
+        } elseif ($oldStatus === 'draft' && $newStatus === 'under_review') {
+            // ارسال مجدد سوال برای بررسی — پاکسازی دلیل رد قبلی
             $updateData['rejection_reason'] = null;
         }
 

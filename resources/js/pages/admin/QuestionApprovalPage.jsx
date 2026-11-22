@@ -309,11 +309,14 @@ export default function QuestionApprovalPage() {
         title: 'ایجادکننده',
         render: (...args) => {
           const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
+          const creatorName =
+            row.created_by?.name ||
+            row.createdBy?.name ||
+            row.created_by_user?.name ||
+            '—';
           return (
             <div className="text-xs">
-              <div className="font-semibold text-ink">
-                {row.created_by_user?.name || row.createdBy?.name || '—'}
-              </div>
+              <div className="font-semibold text-ink">{creatorName}</div>
               <div className="text-ink-soft text-[11px] font-mono mt-0.5">
                 {row.created_at ? formatDate(row.created_at) : ''}
               </div>
@@ -328,12 +331,18 @@ export default function QuestionApprovalPage() {
         render: (...args) => {
           const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
           const cfg = STATUS_CONFIG[row.status] || { label: row.status, tone: 'off' };
+          const reviewerName =
+            row.reviewed_by?.name ||
+            row.reviewedBy?.name ||
+            row.reviewed_by_user?.name;
+
           return (
             <div>
               <Badge tone={cfg.tone}>{cfg.label}</Badge>
-              {row.reviewed_by_user?.name && (
+              {reviewerName && (
                 <div className="text-[10px] text-ink-soft mt-1">
-                  بررسی: {row.reviewed_by_user.name}
+                  بررسی: {reviewerName}
+                  {row.updated_at ? ` · ${formatDate(row.updated_at)}` : ''}
                 </div>
               )}
             </div>
