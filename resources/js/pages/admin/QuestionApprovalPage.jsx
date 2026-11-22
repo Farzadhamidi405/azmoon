@@ -342,7 +342,9 @@ export default function QuestionApprovalPage() {
               {reviewerName && (
                 <div className="text-[10px] text-ink-soft mt-1">
                   بررسی: {reviewerName}
-                  {row.updated_at ? ` · ${formatDate(row.updated_at)}` : ''}
+                  {(row.reviewed_at || row.updated_at)
+                    ? ` · ${formatDate(row.reviewed_at || row.updated_at)}`
+                    : ''}
                 </div>
               )}
             </div>

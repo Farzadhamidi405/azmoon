@@ -52,12 +52,14 @@ class Question extends Model
         'current_version_id',
         'created_by',
         'reviewed_by',
+        'reviewed_at',
     ];
 
     protected function casts(): array
     {
         return [
-            'score' => 'decimal:2',
+            'score'       => 'decimal:2',
+            'reviewed_at' => 'datetime',
         ];
     }
 
@@ -83,7 +85,17 @@ class Question extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function createdByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function reviewedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function reviewedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
     }

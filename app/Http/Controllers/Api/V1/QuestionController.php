@@ -417,6 +417,7 @@ class QuestionController extends Controller
                     $question->update([
                         'status'           => 'approved',
                         'reviewed_by'      => $reviewerId,
+                        'reviewed_at'      => now(),
                         'rejection_reason' => null,
                     ]);
 
@@ -510,10 +511,12 @@ class QuestionController extends Controller
                 ]);
 
                 $updateData['reviewed_by'] = Auth::id();
+                $updateData['reviewed_at'] = now();
                 $updateData['rejection_reason'] = $request->rejection_reason;
             } elseif ($newStatus === 'approved') {
                 // در صورت تأیید سوال (under_review -> approved)، ثبت بازبین و پاکسازی دلیل رد
                 $updateData['reviewed_by'] = Auth::id();
+                $updateData['reviewed_at'] = now();
                 $updateData['rejection_reason'] = null;
             } elseif ($oldStatus === 'draft' && $newStatus === 'under_review') {
                 // ارسال مجدد سوال برای بررسی — پاکسازی دلیل رد قبلی
