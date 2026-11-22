@@ -68,22 +68,29 @@ export default function QuestionsPage() {
     () => [
       {
         key: 'question_text',
+        header: 'سوال',
         title: 'سوال',
-        render: (_, row) => (
-          <div className="max-w-[440px]">
-            <div className="font-semibold text-ink line-clamp-2">{row.question_text}</div>
-            <div className="text-xs text-ink-soft mt-0.5">
-              {row.subject?.name ? `${row.subject.name} · ` : ''}
-              {row.topic ? `موضوع: ${row.topic}` : ''}
+        primary: true,
+        render: (...args) => {
+          const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
+          return (
+            <div className="max-w-[440px]">
+              <div className="font-semibold text-ink line-clamp-2">{row.question_text || '—'}</div>
+              <div className="text-xs text-ink-soft mt-0.5">
+                {row.subject?.name ? `${row.subject.name} · ` : ''}
+                {row.topic ? `موضوع: ${row.topic}` : ''}
+              </div>
             </div>
-          </div>
-        ),
+          );
+        },
       },
       {
         key: 'type',
+        header: 'نوع',
         title: 'نوع',
-        render: (_, row) => {
-          const typeLabel = TYPE_LABELS[row.question_type] || row.question_type;
+        render: (...args) => {
+          const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
+          const typeLabel = TYPE_LABELS[row.question_type] || row.question_type || '—';
           return (
             <div>
               <div className="text-xs font-bold text-navy">{row.section_name || 'Grammar'}</div>
@@ -94,68 +101,82 @@ export default function QuestionsPage() {
       },
       {
         key: 'options_count',
+        header: 'گزینه‌ها',
         title: 'گزینه‌ها',
-        render: (_, row) => {
+        render: (...args) => {
+          const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
           const count = Array.isArray(row.options) ? row.options.length : 0;
           return <span className="text-xs">{count > 0 ? `${count} گزینه` : '—'}</span>;
         },
       },
       {
         key: 'score',
+        header: 'نمره',
         title: 'نمره',
-        render: (_, row) => (
-          <span className="font-mono text-xs font-bold text-navy">
-            {row.score ?? row.points ?? 2}
-          </span>
-        ),
+        render: (...args) => {
+          const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
+          return (
+            <span className="font-mono text-xs font-bold text-navy">
+              {row.score ?? row.points ?? 2}
+            </span>
+          );
+        },
       },
       {
         key: 'status',
+        header: 'وضعیت',
         title: 'وضعیت',
-        render: (status) => {
+        render: (...args) => {
+          const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
+          const status = row.status || (typeof args[0] === 'string' ? args[0] : 'draft');
           const cfg = STATUS_CONFIG[status] || { label: status, tone: 'off' };
           return <Badge tone={cfg.tone}>{cfg.label}</Badge>;
         },
       },
       {
         key: 'actions',
-        title: '',
+        header: 'عملیات',
+        title: 'عملیات',
         align: 'end',
-        render: (_, row) => (
-          <div className="flex items-center justify-end gap-1 flex-wrap">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setVersionModalQuestion(row)}
-            >
-              نسخه‌ها
-            </Button>
-            {canManage && (
+        actions: true,
+        render: (...args) => {
+          const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
+          return (
+            <div className="flex items-center justify-end gap-1 flex-wrap">
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  setEditingQuestion(row);
-                  setFormSection(row.section_name || 'Grammar');
-                  setFormOpen(true);
-                }}
+                onClick={() => setVersionModalQuestion(row)}
               >
-                ویرایش
+                نسخه‌ها
               </Button>
-            )}
-            {/* دکمه حذف فقط برای سوالات با وضعیت draft */}
-            {canManage && row.status === 'draft' && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-red hover:bg-red/10"
-                onClick={() => setDeletingQuestion(row)}
-              >
-                حذف
-              </Button>
-            )}
-          </div>
-        ),
+              {canManage && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setEditingQuestion(row);
+                    setFormSection(row.section_name || 'Grammar');
+                    setFormOpen(true);
+                  }}
+                >
+                  ویرایش
+                </Button>
+              )}
+              {/* دکمه حذف فقط برای سوالات با وضعیت draft */}
+              {canManage && row.status === 'draft' && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-red hover:bg-red/10"
+                  onClick={() => setDeletingQuestion(row)}
+                >
+                  حذف
+                </Button>
+              )}
+            </div>
+          );
+        },
       },
     ],
     [canManage]
@@ -170,10 +191,14 @@ export default function QuestionsPage() {
       } else {
         await create(formData);
         notifySuccess(`سوال ${formData.section_name} با موفقیت در بانک سوالات ثبت شد.`);
+        setPage(1);
+        if (selectedSection && selectedSection !== formData.section_name) {
+          setSelectedSection('');
+        }
       }
       setEditingQuestion(null);
       setFormOpen(false);
-      reload();
+      await reload();
     } catch (err) {
       const msg = err.response?.data?.message || err.apiMessage || 'خطا در ثبت سوال.';
       notifyError(msg);
@@ -303,6 +328,7 @@ export default function QuestionsPage() {
       <div className="card">
         <DataTable
           columns={columns}
+          rows={items}
           data={items}
           loading={loading}
           emptyTitle="هیچ سوالی با این مشخصات در بانک سوالات یافت نشد."

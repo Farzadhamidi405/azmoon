@@ -17,13 +17,36 @@ export default function useQuestions(filters = {}) {
           params: queryParams,
           signal,
         });
-        const unwrapped = unwrapList(res.data);
-        setItems(unwrapped.items || []);
-        setPagination(unwrapped.pagination);
+
+        // استخراج مطمئن لیست سوالات بر اساس ساختارهای مختلف API
+        let list = [];
+        let pag = null;
+        if (res.data) {
+          if (Array.isArray(res.data.data)) {
+            list = res.data.data;
+          } else if (res.data.data && Array.isArray(res.data.data.data)) {
+            list = res.data.data.data;
+            pag = {
+              currentPage: res.data.data.current_page || 1,
+              lastPage: res.data.data.last_page || 1,
+              total: res.data.data.total || list.length,
+              perPage: res.data.data.per_page || 20,
+            };
+          } else {
+            const unwrapped = unwrapList(res.data);
+            list = unwrapped.items || [];
+            pag = unwrapped.pagination;
+          }
+        }
+
+        setItems(list);
+        if (pag) setPagination(pag);
+        return { items: list, pagination: pag };
       } catch (err) {
         if (err.name !== 'CanceledError' && !api.isCancel?.(err)) {
           setError(err);
         }
+        return { items: [], pagination: null };
       } finally {
         setLoading(false);
       }
@@ -37,29 +60,42 @@ export default function useQuestions(filters = {}) {
     return () => controller.abort();
   }, [fetchQuestions]);
 
-  const reload = useCallback(() => fetchQuestions(), [fetchQuestions]);
+  const reload = useCallback((params) => fetchQuestions(params), [fetchQuestions]);
 
   const create = async (data) => {
     const res = await api.post(`${API_BASE}/admin/questions`, data);
-    reload();
-    return unwrapItem(res.data);
+    const created = unwrapItem(res.data);
+    if (created && created.id) {
+      setItems((prev) => [created, ...prev.filter((q) => q.id !== created.id)]);
+    }
+    await fetchQuestions();
+    return created;
   };
 
   const update = async (id, data) => {
     const res = await api.put(`${API_BASE}/admin/questions/${id}`, data);
-    reload();
-    return unwrapItem(res.data);
+    const updated = unwrapItem(res.data);
+    if (updated && updated.id) {
+      setItems((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+    }
+    await fetchQuestions();
+    return updated;
   };
 
   const changeStatus = async (id, status) => {
     const res = await api.patch(`${API_BASE}/admin/questions/${id}/status`, { status });
-    reload();
-    return unwrapItem(res.data);
+    const updated = unwrapItem(res.data);
+    if (updated && updated.id) {
+      setItems((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+    }
+    await fetchQuestions();
+    return updated;
   };
 
   const remove = async (id) => {
     await api.delete(`${API_BASE}/admin/questions/${id}`);
-    reload();
+    setItems((prev) => prev.filter((q) => q.id !== id));
+    await fetchQuestions();
   };
 
   const getVersions = async (id) => {

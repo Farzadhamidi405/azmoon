@@ -17,9 +17,24 @@ function isBlank(value) {
 }
 
 function cellContent(col, row, index) {
-  if (col.actions) return typeof col.render === 'function' ? col.render(row, index) : null;
-  const out = typeof col.render === 'function' ? col.render(row, index) : row ? row[col.key] : undefined;
-  return isBlank(out) ? EMPTY_CELL : out;
+  if (!row) return EMPTY_CELL;
+  const val = row[col.key];
+
+  if (typeof col.render === 'function') {
+    if (col.actions) {
+      return col.render.length >= 2 ? col.render(val, row, index) : col.render(row, index);
+    }
+    // اگر render آرگومان‌های (val, row, index) می‌خواهد:
+    if (col.render.length >= 2) {
+      const out = col.render(val, row, index);
+      return isBlank(out) ? EMPTY_CELL : out;
+    }
+    // اگر تک‌آرگومان است: ابتدا کل شیء row را پاس بدهیم
+    const out = col.render(row, index);
+    return isBlank(out) ? EMPTY_CELL : out;
+  }
+
+  return isBlank(val) ? EMPTY_CELL : val;
 }
 
 function resolveKey(row, index, rowKey) {
@@ -31,12 +46,13 @@ function errorText(error) {
   return typeof error === 'string' && error ? error : UI_TEXT.loadError;
 }
 
-// columns: [{ key, header, render?(row, index), align?, className?, headerClassName?, primary?, actions?, cardHidden? }]
+// columns: [{ key, header, title, render?(val, row, index), align?, className?, headerClassName?, primary?, actions?, cardHidden? }]
 // mobile="cards": a table from md up and vertical cards below 768px.
 // mobile="scroll": the table stays and scrolls horizontally on small screens.
 export default function DataTable({
   columns = [],
-  rows = [],
+  rows,
+  data, // alias for rows
   rowKey = 'id',
   loading = false,
   error = null,
@@ -50,7 +66,7 @@ export default function DataTable({
   caption,
   className,
 }) {
-  const list = Array.isArray(rows) ? rows : [];
+  const list = Array.isArray(rows) ? rows : Array.isArray(data) ? data : [];
   const hasRows = list.length > 0;
   const cards = mobile === 'cards';
   const showError = Boolean(error) && !loading;
@@ -112,7 +128,7 @@ export default function DataTable({
                   scope="col"
                   className={cx(TH, ALIGN[col.align] || 'text-start', col.headerClassName)}
                 >
-                  {col.header}
+                  {col.header ?? col.title}
                 </th>
               ))}
             </tr>
@@ -147,7 +163,7 @@ export default function DataTable({
                       key={col.key ?? `col-${ci}`}
                       className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0"
                     >
-                      <dt className="shrink-0 text-xs font-semibold text-ink-soft">{col.header}</dt>
+                      <dt className="shrink-0 text-xs font-semibold text-ink-soft">{col.header ?? col.title}</dt>
                       <dd className="m-0 min-w-0 break-words text-end text-[13px]">{cellContent(col, row, ri)}</dd>
                     </div>
                   ))}

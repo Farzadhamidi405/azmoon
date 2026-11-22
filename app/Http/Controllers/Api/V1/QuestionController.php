@@ -77,6 +77,15 @@ class QuestionController extends Controller
     {
         Gate::authorize('create', Question::class);
 
+        if ($request->input('question_type') === 'single_choice') {
+            $request->merge(['question_type' => 'single']);
+        } elseif ($request->input('question_type') === 'multiple_choice') {
+            $request->merge(['question_type' => 'multi']);
+        }
+        if (!$request->has('difficulty') && $request->has('difficulty_level')) {
+            $request->merge(['difficulty' => $request->input('difficulty_level')]);
+        }
+
         $validated = $request->validate([
             'subject_id'    => ['required', 'exists:subjects,id'],
             'section_name'  => ['required', 'string', 'max:100'],
@@ -219,6 +228,15 @@ class QuestionController extends Controller
     public function update(Request $request, Question $question, AuditLogService $audit)
     {
         Gate::authorize('update', $question);
+
+        if ($request->input('question_type') === 'single_choice') {
+            $request->merge(['question_type' => 'single']);
+        } elseif ($request->input('question_type') === 'multiple_choice') {
+            $request->merge(['question_type' => 'multi']);
+        }
+        if (!$request->has('difficulty') && $request->has('difficulty_level')) {
+            $request->merge(['difficulty' => $request->input('difficulty_level')]);
+        }
 
         $targetType = $request->input('question_type', $question->question_type);
 

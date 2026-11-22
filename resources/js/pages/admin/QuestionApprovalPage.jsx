@@ -65,8 +65,10 @@ export default function QuestionApprovalPage() {
     () => [
       {
         key: 'question_text',
+        header: 'متن سوال و گزینه‌ها',
         title: 'متن سوال و گزینه‌ها',
-        render: (_, row) => {
+        render: (...args) => {
+          const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
           const isExpanded = expandedId === row.id;
           return (
             <div className="space-y-1.5 py-1">
@@ -126,35 +128,48 @@ export default function QuestionApprovalPage() {
       },
       {
         key: 'section_name',
+        header: 'بخش',
         title: 'بخش',
-        render: (sec) => (
-          <span className="text-xs font-bold text-navy">
-            {sec || 'Grammar'}
-          </span>
-        ),
+        render: (...args) => {
+          const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
+          const sec = row.section_name || args[0];
+          return (
+            <span className="text-xs font-bold text-navy">
+              {sec || 'Grammar'}
+            </span>
+          );
+        },
       },
       {
         key: 'creator',
+        header: 'طراح سوال',
         title: 'طراح سوال',
-        render: (_, row) => (
-          <div className="text-xs">
-            <div className="font-semibold text-ink">{row.created_by_user?.name || row.createdBy?.name || '—'}</div>
-            <div className="text-ink-soft text-[11px] font-mono">
-              {row.created_by_user?.email || row.createdBy?.email || ''}
+        render: (...args) => {
+          const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
+          return (
+            <div className="text-xs">
+              <div className="font-semibold text-ink">{row.created_by_user?.name || row.createdBy?.name || '—'}</div>
+              <div className="text-ink-soft text-[11px] font-mono">
+                {row.created_by_user?.email || row.createdBy?.email || ''}
+              </div>
             </div>
-          </div>
-        ),
+          );
+        },
       },
       {
         key: 'status',
+        header: 'وضعیت',
         title: 'وضعیت',
         render: () => <Badge tone="pending">در انتظار بررسی</Badge>,
       },
       {
         key: 'actions',
+        header: 'عملیات بررسی',
         title: 'عملیات بررسی',
         align: 'end',
-        render: (_, row) => {
+        actions: true,
+        render: (...args) => {
+          const row = (args[0] && typeof args[0] === 'object' ? args[0] : args[1]) || {};
           const canAction = canChangeQuestionStatus(user, row);
           const isBusy = actionBusyId === row.id;
 
@@ -222,6 +237,7 @@ export default function QuestionApprovalPage() {
         ) : (
           <DataTable
             columns={columns}
+            rows={items}
             data={items}
             loading={loading}
             emptyTitle="هیچ سوالی در انتظار بررسی وجود ندارد."
