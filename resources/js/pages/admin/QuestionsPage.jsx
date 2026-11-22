@@ -221,11 +221,11 @@ export default function QuestionsPage() {
                 variant="gold"
                 onClick={() => {
                   setEditingQuestion(null);
-                  setFormSection('Vocabulary');
+                  setFormSection(selectedSection && selectedSection !== 'Grammar' ? selectedSection : 'Listening');
                   setFormOpen(true);
                 }}
               >
-                + سوال واژگان / سایر
+                + سوال لیسنینگ
               </Button>
             </div>
           )

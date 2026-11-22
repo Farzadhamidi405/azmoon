@@ -4,11 +4,16 @@ import useSubjects from '../../hooks/useSubjects.js';
 import { api, API_BASE } from '../../lib/api.js';
 import { notifyError, notifySuccess } from '../../lib/notify.js';
 
-const INITIAL_OPTIONS = [
+const DEFAULT_SINGLE_OPTIONS = [
   { option_text: '', is_correct: true, display_order: 0 },
   { option_text: '', is_correct: false, display_order: 1 },
   { option_text: '', is_correct: false, display_order: 2 },
   { option_text: '', is_correct: false, display_order: 3 },
+];
+
+const DEFAULT_TF_OPTIONS = [
+  { option_text: 'صحیح (True)', is_correct: true, display_order: 0 },
+  { option_text: 'غلط (False)', is_correct: false, display_order: 1 },
 ];
 
 export default function QuestionFormModal({
@@ -21,19 +26,23 @@ export default function QuestionFormModal({
   busy = false,
 }) {
   const { items: subjects } = useSubjects();
+
   const [formData, setFormData] = useState({
     subject_id: '',
-    section_name: initialSection || 'Grammar',
-    question_type: initialType || 'single',
+    section_name: 'Grammar',
+    question_type: 'single',
     difficulty: 'medium',
     topic: '',
     score: 2,
     question_text: '',
     passage_id: '',
     media_id: '',
-    options: INITIAL_OPTIONS,
+    short_answer_key: '',
+    options: DEFAULT_SINGLE_OPTIONS,
   });
+
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
 
   // Passages for Reading section
   const [passages, setPassages] = useState([]);
@@ -46,14 +55,36 @@ export default function QuestionFormModal({
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [uploadedAudioName, setUploadedAudioName] = useState('');
 
+  // بارگذاری داده‌های اولیه فقط هنگام باز شدن مودال یا تغییر question
   useEffect(() => {
+    if (!open) return;
+
     if (question) {
       let qType = question.question_type || 'single';
       if (qType === 'single_choice') qType = 'single';
       if (qType === 'multiple_choice') qType = 'multi';
 
+      let opts = [];
+      let shortKey = '';
+
+      if (qType === 'short_answer') {
+        if (Array.isArray(question.options) && question.options.length > 0) {
+          shortKey = question.options[0]?.option_text || '';
+        }
+      } else if (Array.isArray(question.options) && question.options.length > 0) {
+        opts = question.options.map((opt, i) => ({
+          option_text: opt.option_text || '',
+          is_correct: Boolean(opt.is_correct),
+          display_order: opt.display_order ?? i,
+        }));
+      } else if (qType === 'true_false') {
+        opts = DEFAULT_TF_OPTIONS;
+      } else {
+        opts = DEFAULT_SINGLE_OPTIONS;
+      }
+
       setFormData({
-        subject_id: question.subject_id ? String(question.subject_id) : '',
+        subject_id: question.subject_id ? String(question.subject_id) : (subjects[0]?.id ? String(subjects[0].id) : ''),
         section_name: question.section_name || initialSection || 'Grammar',
         question_type: qType,
         difficulty: question.difficulty || 'medium',
@@ -62,33 +93,50 @@ export default function QuestionFormModal({
         question_text: question.question_text || '',
         passage_id: question.passage_id ? String(question.passage_id) : '',
         media_id: question.media_id ? String(question.media_id) : '',
-        options:
-          Array.isArray(question.options) && question.options.length > 0
-            ? question.options.map((opt, i) => ({
-                option_text: opt.option_text || '',
-                is_correct: Boolean(opt.is_correct),
-                display_order: opt.display_order ?? i,
-              }))
-            : INITIAL_OPTIONS,
+        short_answer_key: shortKey,
+        options: opts,
       });
     } else {
+      const qType = initialType || 'single';
+      const sec = initialSection || 'Grammar';
+      let opts = DEFAULT_SINGLE_OPTIONS;
+      if (qType === 'true_false') {
+        opts = DEFAULT_TF_OPTIONS;
+      } else if (qType === 'short_answer') {
+        opts = [];
+      }
+
       setFormData({
         subject_id: subjects[0]?.id ? String(subjects[0].id) : '',
-        section_name: initialSection || 'Grammar',
-        question_type: initialType || 'single',
+        section_name: sec,
+        question_type: qType,
         difficulty: 'medium',
-        topic: initialSection === 'Grammar' ? 'Tenses' : '',
+        topic: sec === 'Grammar' ? 'Tenses' : '',
         score: 2,
         question_text: '',
         passage_id: '',
         media_id: '',
-        options: INITIAL_OPTIONS,
+        short_answer_key: '',
+        options: opts,
       });
     }
+
     setAudioFile(null);
     setUploadedAudioName('');
+    setNewPassageTitle('');
+    setNewPassageText('');
     setErrors({});
-  }, [question, initialSection, initialType, open, subjects]);
+  }, [open, question, initialSection, initialType]);
+
+  // اگر لیست مضامین بعد از باز شدن مودال لود شد، در صورت خالی بودن subject_id به آرامی تنظیم شود
+  useEffect(() => {
+    if (open && !formData.subject_id && subjects.length > 0) {
+      setFormData((prev) => ({
+        ...prev,
+        subject_id: prev.subject_id || String(subjects[0].id),
+      }));
+    }
+  }, [open, subjects, formData.subject_id]);
 
   // بارگذاری متن‌های درک مطلب زمانی که بخش Reading است
   useEffect(() => {
@@ -109,12 +157,43 @@ export default function QuestionFormModal({
     setErrors((prev) => ({ ...prev, [field]: null }));
   };
 
+  const handleTypeChange = (newType) => {
+    setFormData((prev) => {
+      let nextOptions = prev.options;
+      if (newType === 'true_false') {
+        nextOptions = DEFAULT_TF_OPTIONS;
+      } else if (newType === 'short_answer') {
+        nextOptions = [];
+      } else if (prev.question_type === 'true_false' || prev.question_type === 'short_answer' || prev.options.length < 2) {
+        nextOptions = DEFAULT_SINGLE_OPTIONS;
+      } else if (newType === 'single') {
+        // اطمینان از اینکه دقیقاً یکی صحیح باشد
+        const hasCorrect = prev.options.some((o) => o.is_correct);
+        nextOptions = prev.options.map((opt, i) => ({
+          ...opt,
+          is_correct: hasCorrect ? opt.is_correct : i === 0,
+        }));
+      }
+      return {
+        ...prev,
+        question_type: newType,
+        options: nextOptions,
+      };
+    });
+    setErrors((prev) => ({ ...prev, question_type: null, options: null }));
+  };
+
   const handleOptionTextChange = (index, text) => {
     setFormData((prev) => {
       const next = [...prev.options];
       next[index] = { ...next[index], option_text: text };
       return { ...prev, options: next };
     });
+    setErrors((prev) => ({
+      ...prev,
+      options: null,
+      [`options.${index}.option_text`]: null,
+    }));
   };
 
   const handleSelectCorrect = (index) => {
@@ -125,6 +204,39 @@ export default function QuestionFormModal({
         is_correct: isMulti ? (i === index ? !opt.is_correct : opt.is_correct) : i === index,
       }));
       return { ...prev, options: next };
+    });
+    setErrors((prev) => ({ ...prev, options: null }));
+  };
+
+  const handleAddOption = () => {
+    setFormData((prev) => {
+      if (prev.options.length >= 8) return prev;
+      const next = [
+        ...prev.options,
+        {
+          option_text: '',
+          is_correct: false,
+          display_order: prev.options.length,
+        },
+      ];
+      return { ...prev, options: next };
+    });
+  };
+
+  const handleRemoveOption = (index) => {
+    setFormData((prev) => {
+      if (prev.options.length <= 2) return prev;
+      const filtered = prev.options.filter((_, i) => i !== index);
+      const reIndexed = filtered.map((opt, i) => ({
+        ...opt,
+        display_order: i,
+      }));
+      // اگر همه گزینه‌های صحیح حذف شدند، اولین گزینه صحیح شود
+      const hasCorrect = reIndexed.some((o) => o.is_correct);
+      if (!hasCorrect && reIndexed.length > 0 && prev.question_type !== 'short_answer') {
+        reIndexed[0].is_correct = true;
+      }
+      return { ...prev, options: reIndexed };
     });
   };
 
@@ -189,12 +301,65 @@ export default function QuestionFormModal({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (busy || submitting) return;
     setErrors({});
 
     const resolvedSubjectId = formData.subject_id || (subjects[0]?.id ? String(subjects[0].id) : '');
     if (!resolvedSubjectId) {
       setErrors({ subject_id: 'انتخاب مضمون الزامی است.' });
       return;
+    }
+
+    if (!formData.question_text?.trim()) {
+      setErrors({ question_text: 'متن سوال الزامی است.' });
+      return;
+    }
+
+    const numScore = Number(formData.score);
+    if (isNaN(numScore) || numScore <= 0) {
+      setErrors({ score: 'نمره سوال باید عددی مثبت باشد.' });
+      return;
+    }
+
+    let finalOptions = [];
+    if (formData.question_type === 'short_answer') {
+      if (formData.short_answer_key?.trim()) {
+        finalOptions = [
+          {
+            option_text: formData.short_answer_key.trim(),
+            is_correct: true,
+            display_order: 0,
+          },
+        ];
+      } else {
+        finalOptions = [];
+      }
+    } else {
+      const emptyOption = formData.options.some((o) => !o.option_text?.trim());
+      if (emptyOption) {
+        setErrors({ options: 'متن تمام گزینه‌ها باید وارد شود.' });
+        return;
+      }
+
+      const hasCorrect = formData.options.some((o) => o.is_correct);
+      if (!hasCorrect) {
+        setErrors({ options: 'حداقل یک گزینه را به عنوان پاسخ صحیح انتخاب کنید.' });
+        return;
+      }
+
+      if (formData.question_type === 'single' || formData.question_type === 'true_false') {
+        const correctCount = formData.options.filter((o) => o.is_correct).length;
+        if (correctCount !== 1) {
+          setErrors({ options: 'برای این نوع سوال باید دقیقاً یک گزینه صحیح انتخاب شود.' });
+          return;
+        }
+      }
+
+      finalOptions = formData.options.map((opt, idx) => ({
+        option_text: opt.option_text.trim(),
+        is_correct: Boolean(opt.is_correct),
+        display_order: idx,
+      }));
     }
 
     const payload = {
@@ -204,36 +369,13 @@ export default function QuestionFormModal({
       question_text: formData.question_text.trim(),
       difficulty: formData.difficulty || 'medium',
       topic: formData.topic?.trim() || null,
-      score: Number(formData.score) || 1,
+      score: numScore,
       passage_id: formData.passage_id ? Number(formData.passage_id) : null,
       media_id: formData.media_id ? Number(formData.media_id) : null,
-      options:
-        formData.question_type !== 'short_answer'
-          ? formData.options.map((opt, idx) => ({
-              option_text: opt.option_text.trim(),
-              is_correct: Boolean(opt.is_correct),
-              display_order: idx,
-            }))
-          : [],
+      options: finalOptions,
     };
 
-    if (!payload.question_text) {
-      setErrors({ question_text: 'متن سوال الزامی است.' });
-      return;
-    }
-    if (payload.question_type !== 'short_answer') {
-      const emptyOptions = payload.options.some((o) => !o.option_text);
-      if (emptyOptions) {
-        setErrors({ options: 'متن تمام گزینه‌ها باید وارد شود.' });
-        return;
-      }
-      const hasCorrect = payload.options.some((o) => o.is_correct);
-      if (!hasCorrect) {
-        setErrors({ options: 'حداقل یک گزینه را به عنوان پاسخ صحیح انتخاب کنید.' });
-        return;
-      }
-    }
-
+    setSubmitting(true);
     try {
       await onSave(payload);
     } catch (err) {
@@ -246,8 +388,12 @@ export default function QuestionFormModal({
         });
         setErrors(extracted);
       }
+    } finally {
+      setSubmitting(false);
     }
   };
+
+  const isSaving = busy || submitting;
 
   return (
     <Modal
@@ -262,6 +408,7 @@ export default function QuestionFormModal({
             <Select
               value={formData.subject_id || (subjects[0]?.id ? String(subjects[0].id) : '')}
               onChange={(e) => handleChange('subject_id', e.target.value)}
+              disabled={isSaving}
             >
               {subjects.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -271,10 +418,11 @@ export default function QuestionFormModal({
             </Select>
           </Field>
 
-          <Field label="بخش آزمون (Section)" required>
+          <Field label="بخش آزمون (Section)" required error={errors.section_name}>
             <Select
               value={formData.section_name}
               onChange={(e) => handleChange('section_name', e.target.value)}
+              disabled={isSaving}
             >
               <option value="Grammar">Grammar</option>
               <option value="Vocabulary">Vocabulary</option>
@@ -293,6 +441,7 @@ export default function QuestionFormModal({
                 type="file"
                 accept="audio/*"
                 onChange={(e) => setAudioFile(e.target.files?.[0] || null)}
+                disabled={isSaving || uploadingAudio}
                 className="text-xs file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-navy file:text-white"
               />
               <Button
@@ -300,16 +449,30 @@ export default function QuestionFormModal({
                 size="sm"
                 variant="outline"
                 loading={uploadingAudio}
+                disabled={isSaving}
                 onClick={handleUploadAudio}
               >
                 بارگذاری صوت
               </Button>
             </div>
             {formData.media_id && (
-              <div className="text-xs text-teal font-semibold">
-                ✓ فایل صوتی پیوست شد (شناسه مدیا: {formData.media_id} {uploadedAudioName ? `- ${uploadedAudioName}` : ''})
+              <div className="flex items-center justify-between text-xs text-teal font-semibold pt-1">
+                <span>
+                  ✓ فایل صوتی پیوست شد (شناسه مدیا: {formData.media_id} {uploadedAudioName ? `- ${uploadedAudioName}` : ''})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleChange('media_id', '');
+                    setUploadedAudioName('');
+                  }}
+                  className="text-red hover:underline text-[11px]"
+                >
+                  حذف پیوست صوت
+                </button>
               </div>
             )}
+            {errors.media_id && <div className="text-xs text-red">{errors.media_id}</div>}
           </div>
         )}
 
@@ -320,6 +483,7 @@ export default function QuestionFormModal({
             <Select
               value={formData.passage_id}
               onChange={(e) => handleChange('passage_id', e.target.value)}
+              disabled={isSaving}
             >
               <option value="">انتخاب متن درک مطلب از لیست...</option>
               {passages.map((p) => (
@@ -334,30 +498,35 @@ export default function QuestionFormModal({
               value={newPassageTitle}
               onChange={(e) => setNewPassageTitle(e.target.value)}
               placeholder="عنوان متن (مثلاً: Climate of Kunduz)"
+              disabled={isSaving}
             />
             <Textarea
               rows={3}
               value={newPassageText}
               onChange={(e) => setNewPassageText(e.target.value)}
               placeholder="متن کامل درک مطلب..."
+              disabled={isSaving}
             />
             <Button
               type="button"
               size="sm"
               variant="outline"
               loading={creatingPassage}
+              disabled={isSaving}
               onClick={handleCreatePassage}
             >
               + ثبت متن درک مطلب
             </Button>
+            {errors.passage_id && <div className="text-xs text-red">{errors.passage_id}</div>}
           </div>
         )}
 
         <FieldRow cols={3}>
-          <Field label="نوع سوال" required>
+          <Field label="نوع سوال" required error={errors.question_type}>
             <Select
               value={formData.question_type}
-              onChange={(e) => handleChange('question_type', e.target.value)}
+              onChange={(e) => handleTypeChange(e.target.value)}
+              disabled={isSaving}
             >
               <option value="single">چهارگزینه‌ای (تک‌پاسخی)</option>
               <option value="multi">چندگزینه‌ای (چندپاسخی)</option>
@@ -366,10 +535,11 @@ export default function QuestionFormModal({
             </Select>
           </Field>
 
-          <Field label="سطح دشواری" required>
+          <Field label="سطح دشواری" required error={errors.difficulty}>
             <Select
               value={formData.difficulty}
               onChange={(e) => handleChange('difficulty', e.target.value)}
+              disabled={isSaving}
             >
               <option value="easy">آسان (Easy)</option>
               <option value="medium">متوسط (Medium)</option>
@@ -384,6 +554,7 @@ export default function QuestionFormModal({
               min="0.5"
               value={formData.score}
               onChange={(e) => handleChange('score', e.target.value)}
+              disabled={isSaving}
             />
           </Field>
         </FieldRow>
@@ -393,6 +564,7 @@ export default function QuestionFormModal({
             value={formData.topic}
             onChange={(e) => handleChange('topic', e.target.value)}
             placeholder="مثلاً: Present Perfect Tense یا Vocabulary"
+            disabled={isSaving}
           />
         </Field>
 
@@ -402,53 +574,114 @@ export default function QuestionFormModal({
             value={formData.question_text}
             onChange={(e) => handleChange('question_text', e.target.value)}
             placeholder="متن کامل سوال را وارد نمایید..."
+            disabled={isSaving}
           />
         </Field>
 
+        {/* فیلد اختصاصی پاسخ کوتاه (Short Answer) */}
+        {formData.question_type === 'short_answer' && (
+          <Field label="پاسخ نمونه / کلید پاسخ صحیح (اختیاری)" error={errors.short_answer_key}>
+            <Input
+              value={formData.short_answer_key}
+              onChange={(e) => handleChange('short_answer_key', e.target.value)}
+              placeholder="پاسخ کوتاه مورد انتظار یا کلید نمره‌دهی..."
+              disabled={isSaving}
+            />
+          </Field>
+        )}
+
+        {/* گزینه‌های پاسخ برای سوالات گزینه‌ای و صحیح/غلط */}
         {formData.question_type !== 'short_answer' && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-navy">
-                گزینه‌های پاسخ (گزینه صحیح را علامت بزنید)
+                {formData.question_type === 'true_false'
+                  ? 'تعیین گزینه صحیح (پاسخ معتبر را علامت بزنید):'
+                  : 'گزینه‌های پاسخ (گزینه صحیح را علامت بزنید):'}
               </label>
               {errors.options && <span className="text-xs text-red">{errors.options}</span>}
             </div>
 
             <div className="space-y-2">
-              {formData.options.map((opt, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <span className="font-mono text-xs text-ink-soft w-4 text-center">
-                    {String.fromCharCode(65 + idx)}
-                  </span>
-                  <div
-                    className="flex items-center justify-center p-1.5 cursor-pointer"
-                    onClick={() => handleSelectCorrect(idx)}
-                  >
-                    <input
-                      type={formData.question_type === 'multi' ? 'checkbox' : 'radio'}
-                      name="correct_option"
-                      checked={opt.is_correct}
-                      onChange={() => handleSelectCorrect(idx)}
-                      className="mt-0.5"
-                    />
+              {formData.options.map((opt, idx) => {
+                const optErr = errors[`options.${idx}.option_text`];
+                return (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-ink-soft w-4 text-center">
+                        {String.fromCharCode(65 + idx)}
+                      </span>
+                      <div
+                        className="flex items-center justify-center p-1.5 cursor-pointer"
+                        onClick={() => !isSaving && handleSelectCorrect(idx)}
+                        title="انتخاب به عنوان پاسخ صحیح"
+                      >
+                        <input
+                          type={formData.question_type === 'multi' ? 'checkbox' : 'radio'}
+                          name="correct_option"
+                          checked={opt.is_correct}
+                          onChange={() => handleSelectCorrect(idx)}
+                          disabled={isSaving}
+                          className="mt-0.5 cursor-pointer"
+                        />
+                      </div>
+                      <Input
+                        value={opt.option_text}
+                        onChange={(e) => handleOptionTextChange(idx, e.target.value)}
+                        placeholder={
+                          formData.question_type === 'true_false'
+                            ? idx === 0
+                              ? 'صحیح (True)'
+                              : 'غلط (False)'
+                            : `متن گزینه ${String.fromCharCode(65 + idx)}...`
+                        }
+                        disabled={isSaving}
+                        className="flex-1"
+                      />
+                      {/* دکمه حذف گزینه (فقط برای single و multi و وقتی بیش از ۲ گزینه داریم) */}
+                      {formData.question_type !== 'true_false' && formData.options.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveOption(idx)}
+                          disabled={isSaving}
+                          className="text-xs text-ink-soft hover:text-red px-1.5 py-1 rounded transition-colors"
+                          title="حذف این گزینه"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    {optErr && (
+                      <div className="text-[11px] text-red mr-12">{optErr}</div>
+                    )}
                   </div>
-                  <Input
-                    value={opt.option_text}
-                    onChange={(e) => handleOptionTextChange(idx, e.target.value)}
-                    placeholder={`متن گزینه ${String.fromCharCode(65 + idx)}...`}
-                    className="flex-1"
-                  />
-                </div>
-              ))}
+                );
+              })}
             </div>
+
+            {/* دکمه افزودن گزینه برای single و multi */}
+            {formData.question_type !== 'true_false' && formData.options.length < 8 && (
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={isSaving}
+                  onClick={handleAddOption}
+                  className="text-xs text-navy"
+                >
+                  + افزودن گزینه {String.fromCharCode(65 + formData.options.length)}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-line">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={isSaving}>
             انصراف
           </Button>
-          <Button type="submit" variant="gold" loading={busy}>
+          <Button type="submit" variant="gold" loading={isSaving} disabled={isSaving}>
             {question ? 'ذخیره تغییرات' : 'ثبت در بانک سوالات'}
           </Button>
         </div>

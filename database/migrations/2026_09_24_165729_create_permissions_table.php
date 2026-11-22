@@ -18,8 +18,8 @@ return new class extends Migration
             // Module name: exams, questions, candidates, labs, results, users, settings, ...
             $table->string('module');
 
-            // Basic CRUD action.
-            $table->enum('action', ['view', 'create', 'update', 'delete']);
+            // Basic CRUD action + assign_access.
+            $table->enum('action', ['view', 'create', 'update', 'delete', 'assign_access']);
 
             $table->timestamps();
 

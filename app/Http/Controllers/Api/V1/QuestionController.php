@@ -87,11 +87,49 @@ class QuestionController extends Controller
             'score'         => ['required', 'numeric', 'min:0'],
             'passage_id'    => ['nullable', 'exists:passages,id'],
             'media_id'      => ['nullable', 'exists:media,id'],
-            'options'       => ['required_unless:question_type,short_answer', 'array', 'min:2'],
+            'options'       => [
+                Rule::requiredIf(fn() => $request->input('question_type') !== 'short_answer'),
+                'array',
+                Rule::when(
+                    $request->input('question_type') !== 'short_answer' && $request->input('question_type') !== 'true_false',
+                    ['min:2']
+                ),
+                Rule::when(
+                    $request->input('question_type') === 'true_false',
+                    ['size:2']
+                ),
+            ],
             'options.*.option_text'   => ['required', 'string'],
             'options.*.is_correct'    => ['required', 'boolean'],
-            'options.*.display_order' => ['integer'],
+            'options.*.display_order' => ['nullable', 'integer'],
         ]);
+
+        $options = $validated['options'] ?? [];
+        $type = $validated['question_type'];
+
+        if ($type === 'single' || $type === 'true_false') {
+            $correctCount = collect($options)->filter(fn($opt) => !empty($opt['is_correct']))->count();
+            if ($correctCount !== 1) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'برای این نوع سوال باید دقیقاً یک گزینه به عنوان پاسخ صحیح انتخاب شود.',
+                    'errors'  => [
+                        'options' => ['برای این نوع سوال باید دقیقاً یک گزینه به عنوان پاسخ صحیح انتخاب شود.'],
+                    ],
+                ], 422);
+            }
+        } elseif ($type === 'multi') {
+            $correctCount = collect($options)->filter(fn($opt) => !empty($opt['is_correct']))->count();
+            if ($correctCount < 1) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'حداقل یک گزینه را به عنوان پاسخ صحیح انتخاب کنید.',
+                    'errors'  => [
+                        'options' => ['حداقل یک گزینه را به عنوان پاسخ صحیح انتخاب کنید.'],
+                    ],
+                ], 422);
+            }
+        }
 
         DB::transaction(function () use ($validated, &$question, $audit) {
             // ساخت سوال
@@ -121,6 +159,13 @@ class QuestionController extends Controller
                 }
             }
 
+            // گرفتن متن درک مطلب برای ثبت در اسنپ‌شات نسخه
+            $passageSnapshot = null;
+            if (!empty($validated['passage_id'])) {
+                $passage = \App\Models\Passage::find($validated['passage_id']);
+                $passageSnapshot = $passage?->body_text;
+            }
+
             // ساخت اولین Version
             $version = QuestionVersion::create([
                 'question_id'     => $question->id,
@@ -130,7 +175,7 @@ class QuestionController extends Controller
                 'section_name'    => $question->section_name,
                 'difficulty'      => $question->difficulty,
                 'options_snapshot'=> $validated['options'] ?? [],
-                'passage_snapshot'=> null,
+                'passage_snapshot'=> $passageSnapshot,
                 'media_id'        => $question->media_id,
                 'changed_by'      => Auth::id(),
                 'change_reason'   => 'Initial version',
@@ -158,7 +203,7 @@ class QuestionController extends Controller
             );
         });
 
-        $question->load(['subject', 'createdBy', 'options', 'currentVersion']);
+        $question->load(['subject', 'createdBy', 'options', 'passage', 'media', 'currentVersion']);
 
         return response()->json([
             'success' => true,
@@ -175,6 +220,8 @@ class QuestionController extends Controller
     {
         Gate::authorize('update', $question);
 
+        $targetType = $request->input('question_type', $question->question_type);
+
         $validated = $request->validate([
             'section_name'  => ['sometimes', 'string', 'max:100'],
             'question_type' => ['sometimes', Rule::in(Question::TYPES)],
@@ -185,11 +232,49 @@ class QuestionController extends Controller
             'passage_id'    => ['nullable', 'exists:passages,id'],
             'media_id'      => ['nullable', 'exists:media,id'],
             'change_reason' => ['nullable', 'string', 'max:255'],
-            'options'       => ['sometimes', 'array', 'min:2'],
+            'options'       => [
+                'sometimes',
+                'array',
+                Rule::when(
+                    $targetType !== 'short_answer' && $targetType !== 'true_false',
+                    ['min:2']
+                ),
+                Rule::when(
+                    $targetType === 'true_false',
+                    ['size:2']
+                ),
+            ],
             'options.*.option_text'   => ['required', 'string'],
             'options.*.is_correct'    => ['required', 'boolean'],
-            'options.*.display_order' => ['integer'],
+            'options.*.display_order' => ['nullable', 'integer'],
         ]);
+
+        if (isset($validated['options'])) {
+            $options = $validated['options'];
+            if ($targetType === 'single' || $targetType === 'true_false') {
+                $correctCount = collect($options)->filter(fn($opt) => !empty($opt['is_correct']))->count();
+                if ($correctCount !== 1) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'برای این نوع سوال باید دقیقاً یک گزینه به عنوان پاسخ صحیح انتخاب شود.',
+                        'errors'  => [
+                            'options' => ['برای این نوع سوال باید دقیقاً یک گزینه به عنوان پاسخ صحیح انتخاب شود.'],
+                        ],
+                    ], 422);
+                }
+            } elseif ($targetType === 'multi') {
+                $correctCount = collect($options)->filter(fn($opt) => !empty($opt['is_correct']))->count();
+                if ($correctCount < 1) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'حداقل یک گزینه را به عنوان پاسخ صحیح انتخاب کنید.',
+                        'errors'  => [
+                            'options' => ['حداقل یک گزینه را به عنوان پاسخ صحیح انتخاب کنید.'],
+                        ],
+                    ], 422);
+                }
+            }
+        }
 
         DB::transaction(function () use ($validated, $question, $audit) {
             // متادیتای قبل از ویرایش برای old_value (متن سوال و گزینه‌ها ذخیره نمی‌شود).
@@ -221,6 +306,13 @@ class QuestionController extends Controller
             
             $newVersionNumber = $lastVersion ? $lastVersion->version_number + 1 : 1;
 
+            $passageId = $validated['passage_id'] ?? $question->passage_id;
+            $passageSnapshot = null;
+            if ($passageId) {
+                $passage = \App\Models\Passage::find($passageId);
+                $passageSnapshot = $passage?->body_text;
+            }
+
             $version = QuestionVersion::create([
                 'question_id'     => $question->id,
                 'version_number'  => $newVersionNumber,
@@ -229,7 +321,7 @@ class QuestionController extends Controller
                 'section_name'    => $question->section_name,
                 'difficulty'      => $question->difficulty,
                 'options_snapshot'=> $validated['options'] ?? $question->options->toArray(),
-                'passage_snapshot'=> null,
+                'passage_snapshot'=> $passageSnapshot,
                 'media_id'        => $question->media_id,
                 'changed_by'      => Auth::id(),
                 'change_reason'   => $validated['change_reason'] ?? null,

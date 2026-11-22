@@ -13,9 +13,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement(
-            "ALTER TABLE permissions MODIFY action ENUM('view', 'create', 'update', 'delete', 'assign_access') NOT NULL"
-        );
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement(
+                "ALTER TABLE permissions MODIFY action ENUM('view', 'create', 'update', 'delete', 'assign_access') NOT NULL"
+            );
+        }
     }
 
     /**
@@ -24,8 +26,10 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement(
-            "ALTER TABLE permissions MODIFY action ENUM('view', 'create', 'update', 'delete') NOT NULL"
-        );
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement(
+                "ALTER TABLE permissions MODIFY action ENUM('view', 'create', 'update', 'delete') NOT NULL"
+            );
+        }
     }
 };
