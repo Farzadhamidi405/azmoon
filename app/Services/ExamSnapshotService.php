@@ -66,6 +66,67 @@ class ExamSnapshotService
             $displayOrder = 1;
             $snapshotPayloadForHash = [];
 
+            // اگر آزمون مستقیماً دارای سوالات انتخاب‌شده باشد، از همان سوالات استفاده کن
+            $attachedQuestions = $exam->questions()->with(['options', 'passage', 'media'])->get();
+            if ($attachedQuestions->isNotEmpty()) {
+                $targetCount = $attachedQuestions->count();
+                $scorePerQuestion = $targetCount > 0 ? round(((float) $exam->total_marks / $targetCount), 2) : 1.0;
+                $defaultSec = $sections->first();
+
+                foreach ($attachedQuestions as $q) {
+                    $optionsList = $q->options->map(function ($opt, $idx) {
+                        return [
+                            'id'            => $opt->id,
+                            'option_text'   => $opt->option_text,
+                            'is_correct'    => (bool) $opt->is_correct,
+                            'display_order' => $opt->display_order ?? ($idx + 1),
+                        ];
+                    })->values()->toArray();
+
+                    if ((bool) $exam->randomize_options && count($optionsList) > 1) {
+                        shuffle($optionsList);
+                    }
+
+                    $secId = $q->pivot->exam_section_id ?: ($sections->firstWhere('name', $q->section_name)?->id ?: $defaultSec->id);
+                    $finalScore = $q->pivot->score ?: $scorePerQuestion;
+
+                    ExamSnapshotQuestion::create([
+                        'exam_snapshot_id'       => $snapshot->id,
+                        'question_id'            => $q->id,
+                        'question_version_id'    => $q->current_version_id,
+                        'exam_section_id'        => $secId,
+                        'display_order'          => $displayOrder++,
+                        'score'                  => $finalScore,
+                        'question_text_snapshot' => $q->question_text,
+                        'question_type_snapshot' => $q->question_type,
+                        'options_snapshot'       => $optionsList,
+                        'passage_snapshot'       => $q->passage ? $q->passage->body_text : null,
+                        'media_snapshot'         => $q->media ? [
+                            'id'                     => $q->media->id,
+                            'type'                   => $q->media->type,
+                            'file_path'              => $q->media->file_path,
+                            'duration_seconds'       => $q->media->duration_seconds,
+                            'allow_replay'           => (bool) $q->media->allow_replay,
+                            'max_replay_count'       => $q->media->max_replay_count,
+                            'allow_pause'            => (bool) $q->media->allow_pause,
+                            'allow_seek'             => (bool) $q->media->allow_seek,
+                            'playback_speed_options' => $q->media->playback_speed_options,
+                        ] : null,
+                        'randomization_seed'     => Str::random(16),
+                    ]);
+
+                    $snapshotPayloadForHash[] = [
+                        'q_id' => $q->id,
+                        'text' => $q->question_text,
+                    ];
+                }
+
+                $hash = hash('sha256', json_encode($snapshotPayloadForHash));
+                $snapshot->update(['snapshot_hash' => $hash]);
+
+                return $snapshot;
+            }
+
             foreach ($sections as $section) {
                 // بررسی تنظیمات استخر سوالات (Question Pool)
                 $pool = $section->questionPool;

@@ -125,6 +125,10 @@ Route::prefix("v1")->group(function () {
                 Route::patch("/{exam}/status", [ExamController::class, "changeStatus"]);
                 Route::get("/{exam}/pool", [ExamController::class, "getPool"]);
                 Route::post("/{exam}/pool", [ExamController::class, "updatePool"]);
+                Route::get("/{exam}/questions", [ExamController::class, "getQuestions"]);
+                Route::get("/{exam}/available-questions", [ExamController::class, "getAvailableQuestions"]);
+                Route::post("/{exam}/questions", [ExamController::class, "syncQuestions"]);
+                Route::delete("/{exam}/questions/{question}", [ExamController::class, "removeQuestion"]);
             });
 
             // ─── Question Bank ─────────────────────────────────────

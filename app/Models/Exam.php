@@ -93,6 +93,15 @@ class Exam extends Model
         return $this->hasOne(ExamSnapshot::class)->latestOfMany();
     }
 
+    /** سوالات مستقیماً متصل‌شده به این آزمون */
+    public function questions()
+    {
+        return $this->belongsToMany(Question::class, 'exam_questions')
+            ->withPivot(['exam_section_id', 'display_order', 'score'])
+            ->withTimestamps()
+            ->orderBy('exam_questions.display_order');
+    }
+
     /** شفت‌های این آزمون */
     public function shifts()
     {

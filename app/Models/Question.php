@@ -27,6 +27,7 @@ class Question extends Model
         'active',
         'inactive',
         'archived',
+        'rejected',
     ];
 
     const TYPES = [
@@ -47,6 +48,7 @@ class Question extends Model
         'passage_id',
         'media_id',
         'status',
+        'rejection_reason',
         'possible_duplicate_of',
         'current_version_id',
         'created_by',
@@ -109,6 +111,14 @@ class Question extends Model
     {
         return $this->hasMany(QuestionVersion::class, 'question_id')
                     ->orderByDesc('version_number');
+    }
+
+    /** آزمون‌هایی که این سوال در آنها قرار گرفته است */
+    public function exams()
+    {
+        return $this->belongsToMany(Exam::class, 'exam_questions')
+                    ->withPivot(['exam_section_id', 'display_order', 'score'])
+                    ->withTimestamps();
     }
 
     // ─── Scopes ──────────────────────────────────────────────

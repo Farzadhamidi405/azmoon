@@ -37,29 +37,67 @@ export default function useExams(filters = {}) {
     return () => controller.abort();
   }, [fetchExams]);
 
-  const reload = useCallback(() => fetchExams(), [fetchExams]);
+  const reload = useCallback((params) => fetchExams(params), [fetchExams]);
 
   const create = async (data) => {
     const res = await api.post(`${API_BASE}/admin/exams`, data);
-    reload();
-    return unwrapItem(res.data);
+    const created = unwrapItem(res.data);
+    if (created && created.id) {
+      setItems((prev) => [created, ...prev.filter((e) => e.id !== created.id)]);
+    }
+    await fetchExams();
+    return created;
   };
 
   const update = async (id, data) => {
     const res = await api.put(`${API_BASE}/admin/exams/${id}`, data);
-    reload();
-    return unwrapItem(res.data);
+    const updated = unwrapItem(res.data);
+    if (updated && updated.id) {
+      setItems((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+    }
+    await fetchExams();
+    return updated;
   };
 
   const changeStatus = async (id, status) => {
     const res = await api.patch(`${API_BASE}/admin/exams/${id}/status`, { status });
-    reload();
-    return unwrapItem(res.data);
+    const updated = unwrapItem(res.data);
+    if (updated && updated.id) {
+      setItems((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+    }
+    await fetchExams();
+    return updated;
   };
 
   const remove = async (id) => {
     await api.delete(`${API_BASE}/admin/exams/${id}`);
-    reload();
+    setItems((prev) => prev.filter((e) => e.id !== id));
+    await fetchExams();
+  };
+
+  const getQuestions = async (examId) => {
+    const res = await api.get(`${API_BASE}/admin/exams/${examId}/questions`);
+    return res.data || { data: [], count: 0, total_score: 0 };
+  };
+
+  const getAvailableQuestions = async (examId, params = {}) => {
+    const res = await api.get(`${API_BASE}/admin/exams/${examId}/available-questions`, { params });
+    return unwrapList(res.data);
+  };
+
+  const syncQuestions = async (examId, questionIds, scores = {}) => {
+    const res = await api.post(`${API_BASE}/admin/exams/${examId}/questions`, {
+      question_ids: questionIds,
+      scores,
+    });
+    await fetchExams();
+    return res.data;
+  };
+
+  const removeQuestion = async (examId, questionId) => {
+    const res = await api.delete(`${API_BASE}/admin/exams/${examId}/questions/${questionId}`);
+    await fetchExams();
+    return res.data;
   };
 
   return {
@@ -72,5 +110,9 @@ export default function useExams(filters = {}) {
     update,
     changeStatus,
     remove,
+    getQuestions,
+    getAvailableQuestions,
+    syncQuestions,
+    removeQuestion,
   };
 }

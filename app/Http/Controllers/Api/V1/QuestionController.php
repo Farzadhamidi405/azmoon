@@ -27,7 +27,7 @@ class QuestionController extends Controller
     {
         Gate::authorize('viewAny', Question::class);
 
-        $query = Question::with(['subject', 'createdBy', 'options'])
+        $query = Question::with(['subject', 'createdBy', 'reviewedBy', 'options', 'passage', 'media'])
             ->when($request->subject_id,   fn($q) => $q->where('subject_id', $request->subject_id))
             ->when($request->section_name, fn($q) => $q->where('section_name', $request->section_name))
             ->when($request->status,       fn($q) => $q->where('status', $request->status))
@@ -384,6 +384,12 @@ class QuestionController extends Controller
 
         $request->validate([
             'status' => ['required', Rule::in(Question::STATUSES)],
+            'rejection_reason' => [
+                Rule::requiredIf(fn() => $request->status === 'rejected'),
+                'nullable',
+                'string',
+                'max:1000',
+            ],
         ]);
 
         $newStatus = $request->status;
@@ -392,7 +398,8 @@ class QuestionController extends Controller
         // انتقال‌های مجاز
         $allowed = [
             'draft'        => ['under_review'],
-            'under_review' => ['draft', 'approved'],
+            'under_review' => ['draft', 'approved', 'rejected'],
+            'rejected'     => ['draft', 'under_review'],
             'approved'     => ['active', 'inactive'],
             'active'       => ['inactive', 'archived'],
             'inactive'     => ['active', 'archived'],
@@ -408,9 +415,13 @@ class QuestionController extends Controller
 
         $updateData = ['status' => $newStatus];
 
-        // ثبت Reviewer در صورت تأیید
-        if ($newStatus === 'approved') {
+        // ثبت Reviewer و دلیل رد
+        if ($newStatus === 'rejected') {
             $updateData['reviewed_by'] = Auth::id();
+            $updateData['rejection_reason'] = $request->rejection_reason;
+        } elseif ($newStatus === 'approved') {
+            $updateData['reviewed_by'] = Auth::id();
+            $updateData['rejection_reason'] = null;
         }
 
         // وضعیت قبلی، تغییر وضعیت و ثبت audit در یک تراکنش.
@@ -432,7 +443,7 @@ class QuestionController extends Controller
         return response()->json([
             'success' => true,
             'message' => "وضعیت سوال به «{$newStatus}» تغییر کرد.",
-            'data'    => $question->fresh(),
+            'data'    => $question->fresh(['subject', 'createdBy', 'reviewedBy', 'options', 'passage', 'media']),
         ]);
     }
 
