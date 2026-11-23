@@ -16,6 +16,8 @@ export default function ExamQuestionPage() {
     loading,
     submitting,
     error,
+    saveStatus,
+    saveError,
     setCurrentIndex,
     startAttempt,
     saveAnswer,
@@ -184,7 +186,10 @@ export default function ExamQuestionPage() {
                   <span className="font-black text-navy text-lg">
                     سوال {currentIndex + 1} از {totalCount}
                   </span>
-                  <Badge tone="off">{currentQuestion.points ?? 1} نمره</Badge>
+                  <Badge tone="off">{currentQuestion.score ?? (currentQuestion.points ?? 1)} نمره</Badge>
+                  {(currentQuestion.exam_section?.name || currentQuestion.section?.name) && (
+                    <Badge tone="gold">{currentQuestion.exam_section?.name || currentQuestion.section?.name}</Badge>
+                  )}
                 </div>
 
                 <Button
@@ -210,13 +215,13 @@ export default function ExamQuestionPage() {
                   </div>
                   <div className="space-y-4">
                     <div className="text-base md:text-lg font-medium text-ink leading-relaxed">
-                      {currentQuestion.question_text || currentQuestion.question_text_snapshot}
+                      {currentQuestion.question_text_snapshot || currentQuestion.question_text}
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="text-base md:text-lg font-medium text-ink leading-relaxed">
-                  {currentQuestion.question_text || currentQuestion.question_text_snapshot}
+                  {currentQuestion.question_text_snapshot || currentQuestion.question_text}
                 </div>
               )}
 
@@ -262,12 +267,16 @@ export default function ExamQuestionPage() {
               <div className="space-y-3 pt-2">
                 {currentQuestion.options_snapshot && currentQuestion.options_snapshot.length > 0 ? (
                   currentQuestion.options_snapshot.map((opt, idx) => {
+                    const optVal = opt.id !== undefined ? opt.id : (opt.key || opt.option_key || (idx + 1));
                     const optKey = opt.key || opt.option_key || String.fromCharCode(65 + idx);
-                    const isSelected = answers[currentQuestion.id] === optKey;
+                    const isSelected =
+                      String(answers[currentQuestion.id]) === String(optVal) ||
+                      String(answers[currentQuestion.id]) === String(optKey);
+
                     return (
                       <div
                         key={opt.id || idx}
-                        onClick={() => saveAnswer(currentQuestion.id, optKey)}
+                        onClick={() => saveAnswer(currentQuestion.id, optVal)}
                         className={`p-4 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
                           isSelected
                             ? 'border-navy bg-navy/5 font-bold shadow-xs'
@@ -284,7 +293,7 @@ export default function ExamQuestionPage() {
                           {optKey}
                         </div>
                         <div className="text-sm md:text-base text-ink flex-1">
-                          {opt.text || opt.option_text}
+                          {opt.option_text || opt.text}
                         </div>
                       </div>
                     );
@@ -313,8 +322,23 @@ export default function ExamQuestionPage() {
                   ← سوال قبلی
                 </Button>
 
-                <div className="text-xs text-ink-soft">
-                  پاسخ شما بلافاصله ذخیره می‌شود.
+                {/* وضعیت ذخیره‌سازی زنده */}
+                <div className="text-xs flex items-center gap-1.5 font-medium">
+                  {saveStatus === 'saving' && (
+                    <span className="text-gold flex items-center gap-1">
+                      <span className="inline-block animate-spin">⏳</span> در حال ذخیره پاسخ...
+                    </span>
+                  )}
+                  {saveStatus === 'saved' && (
+                    <span className="text-teal flex items-center gap-1">
+                      <span>✓</span> پاسخ ذخیره شد
+                    </span>
+                  )}
+                  {saveStatus === 'failed' && (
+                    <span className="text-red flex items-center gap-1" title={saveError || ''}>
+                      <span>⚠️</span> خطا در ذخیره (در حال تلاش مجدد...)
+                    </span>
+                  )}
                 </div>
 
                 {currentIndex < totalCount - 1 ? (

@@ -515,23 +515,28 @@ class AttemptController extends Controller
 
     /**
      * ذخیره فوری پاسخ یک سوال (Auto-Save).
+     * کاملاً اتمیک، سازگار با ساختار واقعی دیتابیس (exam_snapshot_questions و attempt_answers)،
+     * با پشتیبانی از کلید یکتایی (Idempotency Key) و جلوگیری از دستکاری وضعیت.
      */
     public function saveAnswer(SaveAnswerRequest $request, Attempt $attempt): JsonResponse
     {
+        // ۱. بررسی احراز هویت و مالکیت انحصاری این Attempt توسط متقاضی
         $candidate = auth('candidate')->user();
 
-        if ($attempt->candidate_id !== $candidate->id) {
+        if (!$candidate || (int) $attempt->candidate_id !== (int) $candidate->id) {
             return response()->json(['success' => false, 'message' => 'دسترسی غیرمجاز.'], 403);
         }
 
-        if (!in_array($attempt->status, ['in_progress', 'disconnected'])) {
+        // ۲. بررسی وضعیت باز بودن جلسه آزمون
+        if (!in_array($attempt->status, ['in_progress', 'disconnected'], true)) {
             return response()->json([
                 'success' => false,
                 'message' => 'این آزمون قبلاً ثبت نهایی شده و امکان تغییر پاسخ وجود ندارد.',
             ], 422);
         }
 
-        if ($attempt->isTimeExpired()) {
+        // ۳. بررسی اتمام زمان آزمون در سمت سرور
+        if ($attempt->isExpired() || $attempt->isTimeExpired()) {
             $this->autoSubmit($attempt);
             return response()->json([
                 'success' => false,
@@ -540,47 +545,115 @@ class AttemptController extends Controller
             ], 422);
         }
 
-        // بررسی تعلق سوال و گزینه به اسنپ‌شات آزمون
-        $questionId = (int) $request->input('question_id');
-        $selectedOptionId = $request->input('selected_option_id');
+        $idempotencyKey = (string) $request->input('idempotency_key');
+        $questionId = (int) $request->input('exam_snapshot_question_id');
 
-        $questionsMap = collect($attempt->examSnapshot->snapshot_data['questions'] ?? [])->keyBy('id');
-        $question = $questionsMap->get($questionId);
+        // ۴. بررسی ثبت قبلی با همین idempotency_key (جلوگیری از درخواست‌های تکراری شبکه)
+        $existingByKey = AttemptAnswer::where('idempotency_key', $idempotencyKey)->first();
+        if ($existingByKey) {
+            return response()->json([
+                'success'   => true,
+                'message'   => 'پاسخ قبلاً با موفقیت ذخیره شده است.',
+                'data'      => $existingByKey,
+                'duplicate' => true,
+            ]);
+        }
 
-        if (!$question) {
+        // ۵. بررسی تعلق سوال به اسنپ‌شات واقعی همین Attempt
+        $snapshotQuestion = \App\Models\ExamSnapshotQuestion::where('id', $questionId)
+            ->where('exam_snapshot_id', $attempt->exam_snapshot_id)
+            ->first();
+
+        if (!$snapshotQuestion) {
             return response()->json([
                 'success' => false,
-                'message' => 'سوال مورد نظر متعلق به این آزمون نیست.',
+                'message' => 'سوال مورد نظر متعلق به اسنپ‌شات این آزمون نیست.',
             ], 422);
         }
 
-        if ($selectedOptionId !== null) {
-            $validOptionIds = collect($question['options'] ?? [])->pluck('id')->toArray();
-            if (!in_array((int) $selectedOptionId, $validOptionIds, true)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'گزینه انتخاب‌شده متعلق به این سوال نیست.',
-                ], 422);
+        // ۶. اعتبارسنجی گزینه‌ها در صورت وجود گزینه‌های انتخابی
+        $selectedOptionIds = $request->input('selected_option_ids');
+        if (!empty($selectedOptionIds) && is_array($selectedOptionIds)) {
+            $validOptions = collect($snapshotQuestion->options_snapshot ?? []);
+            $validOptionIds = $validOptions->pluck('id')->filter()->map(fn ($id) => (int) $id)->toArray();
+
+            // در صورتی که گزینه‌ها id عددی ندارند، کلیدهای متنی یا ترتیب را چک می‌کنیم
+            if (!empty($validOptionIds)) {
+                foreach ($selectedOptionIds as $optId) {
+                    if (!in_array((int) $optId, $validOptionIds, true)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'گزینه انتخاب‌شده در گزینه‌های مجاز این سوال یافت نشد.',
+                        ], 422);
+                    }
+                }
             }
         }
 
-        $answer = AttemptAnswer::updateOrCreate(
-            [
-                'attempt_id'  => $attempt->id,
-                'question_id' => $questionId,
-            ],
-            [
-                'selected_option_id' => $selectedOptionId,
-                'answered_at'        => now(),
-            ]
-        );
+        $answerText = $request->input('answer_text');
+        $timeSpentSeconds = (int) ($request->input('time_spent_seconds', 0));
+        $clientTimestamp = $request->filled('client_timestamp') ? Carbon::parse($request->input('client_timestamp')) : null;
+
+        // ۷. ذخیره اتمیک پاسخ در تراکنش پایگاه‌داده
+        $savedAnswer = DB::transaction(function () use (
+            $attempt,
+            $questionId,
+            $selectedOptionIds,
+            $answerText,
+            $timeSpentSeconds,
+            $idempotencyKey,
+            $clientTimestamp
+        ) {
+            $existing = AttemptAnswer::where('attempt_id', $attempt->id)
+                ->where('exam_snapshot_question_id', $questionId)
+                ->lockForUpdate()
+                ->first();
+
+            $changedCount = $existing ? ($existing->changed_count + 1) : 0;
+            $accumulatedTime = $existing ? ($existing->time_spent_seconds + $timeSpentSeconds) : $timeSpentSeconds;
+
+            $now = now();
+
+            $record = AttemptAnswer::updateOrCreate(
+                [
+                    'attempt_id'                 => $attempt->id,
+                    'exam_snapshot_question_id' => $questionId,
+                ],
+                [
+                    'selected_option_ids' => $selectedOptionIds,
+                    'answer_text'         => $answerText,
+                    'time_spent_seconds'  => $accumulatedTime,
+                    'changed_count'       => $changedCount,
+                    'idempotency_key'     => $idempotencyKey,
+                    'client_timestamp'    => $clientTimestamp,
+                    'server_timestamp'    => $now,
+                    'sync_status'         => 'synced',
+                    'answered_at'         => $now,
+                ]
+            );
+
+            // به‌روزرسانی تعداد پاسخ‌های ثبت‌شده در ردیف attempt
+            $answeredCount = AttemptAnswer::where('attempt_id', $attempt->id)
+                ->where(function ($q) {
+                    $q->whereNotNull('selected_option_ids')
+                      ->orWhereNotNull('answer_text');
+                })
+                ->count();
+
+            $attempt->update([
+                'answered_count'   => $answeredCount,
+                'last_activity_at' => $now,
+            ]);
+
+            return $record;
+        });
 
         return response()->json([
-            'success'           => true,
-            'message'           => 'پاسخ با موفقیت ذخیره شد.',
-            'question_id'       => $answer->question_id,
-            'selected_option_id'=> $answer->selected_option_id,
-            'remaining_seconds' => $attempt->calculateRemainingSeconds(),
+            'success'                   => true,
+            'message'                   => 'پاسخ با موفقیت ذخیره شد.',
+            'data'                      => $savedAnswer,
+            'exam_snapshot_question_id' => $savedAnswer->exam_snapshot_question_id,
+            'remaining_seconds'         => method_exists($attempt, 'remainingSeconds') ? $attempt->remainingSeconds() : 0,
         ]);
     }
 

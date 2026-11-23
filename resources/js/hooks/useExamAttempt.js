@@ -12,8 +12,37 @@ export default function useExamAttempt(initialAttemptId = null) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
-  // Sync / Heartbeat ref
-  const heartbeatTimer = useRef(null);
+  // وضعیت ذخیره‌سازی: 'idle' | 'saving' | 'saved' | 'failed'
+  const [saveStatus, setSaveStatus] = useState('saved');
+  const [saveError, setSaveError] = useState(null);
+
+  // کش کلیدهای Idempotency برای جلوگیری از تولید کلید جدید در تلاش مجدد همان مقدار
+  const pendingKeysRef = useRef({});
+  const activeSavesRef = useRef({});
+
+  // استخراج و مپ کردن پاسخ‌های ذخیره‌شده از سرور
+  const mapServerAnswers = (rawAnswers) => {
+    const map = {};
+    if (!rawAnswers) return map;
+
+    const list = Array.isArray(rawAnswers) ? rawAnswers : Object.values(rawAnswers);
+    list.forEach((item) => {
+      const qId = item.exam_snapshot_question_id || item.question_id;
+      if (!qId) return;
+
+      if (Array.isArray(item.selected_option_ids) && item.selected_option_ids.length > 0) {
+        map[qId] = item.selected_option_ids[0];
+      } else if (item.selected_option_id !== undefined && item.selected_option_id !== null) {
+        map[qId] = item.selected_option_id;
+      } else if (item.answer_text) {
+        map[qId] = item.answer_text;
+      } else if (item.answer) {
+        map[qId] = item.answer;
+      }
+    });
+
+    return map;
+  };
 
   // Start or resume attempt
   const startAttempt = useCallback(async () => {
@@ -22,23 +51,20 @@ export default function useExamAttempt(initialAttemptId = null) {
     try {
       const res = await api.post(`${API_BASE}/attempts/start`);
       const data = unwrapItem(res.data);
-      setAttempt(data.attempt || data);
-      
-      const qList = data.questions || data.attempt?.questions || [];
+      const attemptObj = data.attempt || data;
+      setAttempt(attemptObj);
+
+      const qList = data.questions || attemptObj.questions || [];
       setQuestions(qList);
 
-      const savedAnswers = data.answers || data.attempt?.answers || {};
-      const initialMap = {};
-      if (Array.isArray(savedAnswers)) {
-        savedAnswers.forEach((a) => {
-          initialMap[a.question_id] = a.selected_option || a.answer_text || a.answer;
-        });
-      } else if (typeof savedAnswers === 'object') {
-        Object.assign(initialMap, savedAnswers);
-      }
+      const savedAnswers = data.answers || attemptObj.answers || {};
+      const initialMap = mapServerAnswers(savedAnswers);
       setAnswers(initialMap);
 
-      const remSec = data.remaining_seconds ?? data.attempt?.remaining_seconds ?? (data.duration_minutes ? data.duration_minutes * 60 : 3600);
+      const remSec =
+        data.remaining_seconds ??
+        attemptObj.remaining_seconds ??
+        (data.duration_minutes ? data.duration_minutes * 60 : 3600);
       setRemainingSeconds(remSec);
       return data;
     } catch (err) {
@@ -49,20 +75,56 @@ export default function useExamAttempt(initialAttemptId = null) {
     }
   }, []);
 
-  // Save single answer
+  // تولید یا بازیابی کلید Idempotency برای هر جفت (سوال + مقدار)
+  const getIdempotencyKey = (questionId, value) => {
+    const cacheKey = `${questionId}::${value}`;
+    if (!pendingKeysRef.current[cacheKey]) {
+      const rnd = Math.random().toString(36).substring(2, 9);
+      pendingKeysRef.current[cacheKey] = `idemp_${questionId}_${Date.now()}_${rnd}`;
+    }
+    return pendingKeysRef.current[cacheKey];
+  };
+
+  // ذخیره فوری پاسخ (Auto-Save)
   const saveAnswer = async (questionId, value) => {
-    // optimistic update
+    if (!questionId) return;
+
+    // به‌روزرسانی آنی و روان رابط کاربری (Optimistic UI Update)
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
 
     if (!attempt?.id) return;
+
+    setSaveStatus('saving');
+    setSaveError(null);
+
+    const isNumeric = typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value));
+    const idempotencyKey = getIdempotencyKey(questionId, value);
+
+    const payload = {
+      exam_snapshot_question_id: Number(questionId),
+      idempotency_key: idempotencyKey,
+      selected_option_ids: isNumeric ? [Number(value)] : null,
+      answer_text: isNumeric ? null : String(value ?? ''),
+      time_spent_seconds: 2,
+      client_timestamp: new Date().toISOString(),
+    };
+
+    activeSavesRef.current[questionId] = idempotencyKey;
+
     try {
-      await api.post(`${API_BASE}/attempts/${attempt.id}/answer`, {
-        question_id: questionId,
-        selected_option: value,
-        answer: value,
-      });
-    } catch (e) {
-      // ignore network glitch; will re-sync
+      await api.post(`${API_BASE}/attempts/${attempt.id}/answer`, payload);
+
+      // اگر کاربر در حین درخواست تغییر دیگری نداده باشد، وضعیت را 'saved' می‌کنیم
+      if (activeSavesRef.current[questionId] === idempotencyKey) {
+        setSaveStatus('saved');
+        const cacheKey = `${questionId}::${value}`;
+        delete pendingKeysRef.current[cacheKey];
+      }
+    } catch (err) {
+      setSaveStatus('failed');
+      const msg = err.response?.data?.message || err.apiMessage || 'خطا در ذخیره‌سازی پاسخ.';
+      setSaveError(msg);
+      // کلید را برای retry نگه می‌داریم
     }
   };
 
@@ -119,9 +181,11 @@ export default function useExamAttempt(initialAttemptId = null) {
     if (!attempt?.id) return;
 
     const interval = setInterval(() => {
-      api.post(`${API_BASE}/attempts/${attempt.id}/heartbeat`, {
-        remaining_seconds: remainingSeconds,
-      }).catch(() => {});
+      api
+        .post(`${API_BASE}/attempts/${attempt.id}/heartbeat`, {
+          remaining_seconds: remainingSeconds,
+        })
+        .catch(() => {});
     }, 15000);
 
     return () => clearInterval(interval);
@@ -138,6 +202,8 @@ export default function useExamAttempt(initialAttemptId = null) {
     loading,
     submitting,
     error,
+    saveStatus,
+    saveError,
     setCurrentIndex,
     startAttempt,
     saveAnswer,
