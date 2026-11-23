@@ -89,6 +89,10 @@ export default function CandidatesPage({ action = null }) {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignCandidate, setAssignCandidate] = useState(null);
+  const [unassignModalOpen, setUnassignModalOpen] = useState(false);
+  const [unassignCandidate, setUnassignCandidate] = useState(null);
+  const [unassignReason, setUnassignReason] = useState('');
+  const [unassignBusy, setUnassignBusy] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [editingCandidate, setEditingCandidate] = useState(null);
@@ -173,6 +177,31 @@ export default function CandidatesPage({ action = null }) {
       notifyError(msg);
     } finally {
       setStatusTogglingId(null);
+    }
+  };
+
+  // لغو تخصیص متقاضی (Unassign)
+  const handleOpenUnassign = (candidate) => {
+    setUnassignCandidate(candidate);
+    setUnassignReason('');
+    setUnassignModalOpen(true);
+  };
+
+  const handleConfirmUnassign = async () => {
+    if (!unassignCandidate) return;
+    setUnassignBusy(true);
+    try {
+      const res = await api.post(`/api/v1/admin/candidates/${unassignCandidate.id}/unassign`, {
+        reason: unassignReason || 'لغو تخصیص توسط ناظر/مدیر سیستم',
+      });
+      notifySuccess(res.data?.message || 'تخصیص متقاضی با موفقیت لغو شد.');
+      setUnassignModalOpen(false);
+      setUnassignCandidate(null);
+      reload();
+    } catch (err) {
+      notifyError(err.response?.data?.message || err.apiMessage || 'خطا در لغو تخصیص متقاضی.');
+    } finally {
+      setUnassignBusy(false);
     }
   };
 
@@ -280,6 +309,19 @@ export default function CandidatesPage({ action = null }) {
                   title="تخصیص به آزمون، شیفت و صندلی"
                 >
                   تخصیص
+                </Button>
+              )}
+
+              {/* لغو تخصیص آزمون و صندلی */}
+              {canUpdate && (row.latest_assignment || row.latestAssignment) && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-red hover:bg-red/10"
+                  onClick={() => handleOpenUnassign(row)}
+                  title="لغو تخصیص آزمون و آزادسازی صندلی"
+                >
+                  لغو تخصیص
                 </Button>
               )}
 
@@ -663,6 +705,56 @@ export default function CandidatesPage({ action = null }) {
           </div>
         </Modal>
       )}
+
+      {/* مودال تأیید لغو تخصیص متقاضی */}
+      <Modal
+        open={unassignModalOpen}
+        onClose={() => !unassignBusy && setUnassignModalOpen(false)}
+        title="تأیید لغو تخصیص آزمون متقاضی"
+        size="sm"
+      >
+        <div className="space-y-4 font-vazir text-ink">
+          <div className="p-3 bg-red/10 border border-red/20 rounded-xl text-xs text-red leading-relaxed">
+            ⚠️ <b>توجه:</b> با لغو تخصیص، صندلی/کامپیوتر متقاضی آزاد شده، کارت ورود قبلی باطل گردیده و وضعیت حضور ریست خواهد شد.
+          </div>
+
+          <div className="text-sm">
+            آیا از لغو تخصیص متقاضی <b className="text-navy">{unassignCandidate?.name}</b> (کد: <span className="font-mono">{unassignCandidate?.candidate_code}</span>) اطمینان دارید؟
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-ink-soft">دلیل لغو تخصیص (اختیاری):</label>
+            <input
+              type="text"
+              className="w-full text-xs p-2 border border-line rounded-lg focus:border-navy focus:outline-none"
+              placeholder="مثال: انصراف داوطلب یا تغییر نوبت آزمون..."
+              value={unassignReason}
+              onChange={(e) => setUnassignReason(e.target.value)}
+              disabled={unassignBusy}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-line">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setUnassignModalOpen(false)}
+              disabled={unassignBusy}
+            >
+              انصراف
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              className="bg-red hover:bg-red/90 text-panel border-red"
+              onClick={handleConfirmUnassign}
+              loading={unassignBusy}
+            >
+              تأیید و لغو تخصیص
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* دیالوگ تأیید حذف با هندلینگ خطا */}
       <ConfirmDialog

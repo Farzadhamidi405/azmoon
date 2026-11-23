@@ -60,6 +60,24 @@ class ShiftController extends Controller
             'capacity'   => 'required|integer|min:1|max:500',
         ]);
 
+        $startTime = Carbon::parse($validated['start_time'])->format('Y-m-d H:i:s');
+        $endTime   = Carbon::parse($validated['end_time'])->format('Y-m-d H:i:s');
+
+        // بررسی عدم تداخل زمانی با سایر شیفت‌های همین لابراتوار
+        $hasOverlap = Shift::where('lab_id', $validated['lab_id'])
+            ->where(function ($query) use ($startTime, $endTime) {
+                $query->where('start_time', '<', $endTime)
+                      ->where('end_time', '>', $startTime);
+            })
+            ->exists();
+
+        if ($hasOverlap) {
+            return response()->json([
+                'success' => false,
+                'message' => 'در این بازه زمانی، شیفت دیگری در این لابراتوار تعریف شده است و تداخل زمانی وجود دارد.',
+            ], 422);
+        }
+
         // ایجاد Shift و ثبت audit در یک تراکنش؛ شکست audit کل ایجاد را برمی‌گرداند.
         $shift = DB::transaction(function () use ($validated, $audit) {
             $newRecord = Shift::create($validated);
@@ -114,15 +132,50 @@ class ShiftController extends Controller
         ]);
 
         // Gap #6: compare against the effective values (sent field, otherwise the stored one)
-        if (isset($validated['start_time']) || isset($validated['end_time'])) {
-            $effectiveStart = isset($validated['start_time']) ? Carbon::parse($validated['start_time']) : $shift->start_time;
-            $effectiveEnd   = isset($validated['end_time'])   ? Carbon::parse($validated['end_time'])   : $shift->end_time;
+        $effectiveStart = isset($validated['start_time']) ? Carbon::parse($validated['start_time']) : $shift->start_time;
+        $effectiveEnd   = isset($validated['end_time'])   ? Carbon::parse($validated['end_time'])   : $shift->end_time;
+        $effectiveLabId = isset($validated['lab_id'])      ? (int) $validated['lab_id']              : (int) $shift->lab_id;
 
-            if ($effectiveEnd->lessThanOrEqualTo($effectiveStart)) {
-                throw ValidationException::withMessages([
-                    'end_time' => ['زمان پایان باید بعد از زمان شروع باشد.'],
-                ]);
+        if ($effectiveEnd->lessThanOrEqualTo($effectiveStart)) {
+            throw ValidationException::withMessages([
+                'end_time' => ['زمان پایان باید بعد از زمان شروع باشد.'],
+            ]);
+        }
+
+        // بررسی اینکه اگر شیفت دارای متقاضی یا Attempt فعال باشد، تغییر بازه زمانی مسدود شود
+        $timeChanged = (isset($validated['start_time']) && Carbon::parse($validated['start_time'])->ne($shift->start_time))
+                    || (isset($validated['end_time']) && Carbon::parse($validated['end_time'])->ne($shift->end_time));
+
+        if ($timeChanged) {
+            $hasActiveAttempts = \App\Models\Attempt::whereIn('status', ['in_progress', 'disconnected'])
+                ->whereHas('candidateAssignment', fn($q) => $q->where('shift_id', $shift->id))
+                ->exists();
+
+            if ($hasActiveAttempts) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'این شیفت دارای آزمون‌های فعال در حال برگزاری است و امکان تغییر بازه زمانی آن وجود ندارد.',
+                ], 422);
             }
+        }
+
+        $formattedStart = $effectiveStart instanceof Carbon ? $effectiveStart->format('Y-m-d H:i:s') : Carbon::parse($effectiveStart)->format('Y-m-d H:i:s');
+        $formattedEnd   = $effectiveEnd instanceof Carbon ? $effectiveEnd->format('Y-m-d H:i:s') : Carbon::parse($effectiveEnd)->format('Y-m-d H:i:s');
+
+        // بررسی عدم تداخل زمانی با سایر شیفت‌های همین لابراتوار (به جز خود این شیفت)
+        $hasOverlap = Shift::where('lab_id', $effectiveLabId)
+            ->where('id', '!=', $shift->id)
+            ->where(function ($query) use ($formattedStart, $formattedEnd) {
+                $query->where('start_time', '<', $formattedEnd)
+                      ->where('end_time', '>', $formattedStart);
+            })
+            ->exists();
+
+        if ($hasOverlap) {
+            return response()->json([
+                'success' => false,
+                'message' => 'تغییر زمان یا لابراتوار این شیفت با شیفت دیگری در همین لابراتوار تداخل زمانی ایجاد می‌کند.',
+            ], 422);
         }
 
         // Gaps #5 / #18: keep the shift consistent with its assignments

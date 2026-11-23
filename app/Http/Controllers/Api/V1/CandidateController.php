@@ -18,6 +18,7 @@ use App\Models\Computer;
 use App\Models\AuditLog;
 use App\Models\EntryCard;
 use App\Models\Incident;
+use App\Models\Attempt;
 use App\Services\CandidateImportService;
 use Illuminate\Support\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -475,6 +476,124 @@ class CandidateController extends Controller
             'success' => true,
             'message' => 'تخصیص آزمون به متقاضی با موفقیت انجام شد.',
             'data'    => $assignment->load(['exam', 'shift', 'lab', 'computer']),
+        ]);
+    }
+
+    /**
+     * لغو تخصیص آزمون و صندلی یک متقاضی (Unassign).
+     * شامل قوانین سخت‌گیرانه بررسی عدم وجود Attempt، آزادسازی کامپیوتر،
+     * ابطال کارت ورود و ثبت در Audit Log.
+     */
+    public function unassign(\Illuminate\Http\Request $request, Candidate $candidate, AuditLogService $audit): JsonResponse
+    {
+        $request->validate([
+            'reason'        => 'nullable|string|max:500',
+            'assignment_id' => 'nullable|integer',
+        ]);
+
+        // ۱. بازیابی تخصیص مورد نظر منحصراً متعلق به همین متقاضی
+        $assignmentQuery = CandidateAssignment::where('candidate_id', $candidate->id);
+
+        if ($request->filled('assignment_id')) {
+            $assignment = $assignmentQuery->where('id', $request->assignment_id)->first();
+            if (!$assignment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'تخصیص انتخاب‌شده متعلق به این متقاضی نیست یا یافت نشد.',
+                ], 422);
+            }
+        } else {
+            $assignment = $assignmentQuery->latest('id')->first();
+            if (!$assignment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'این متقاضی در حال حاضر هیچ تخصیص آزمونی ندارد.',
+                ], 422);
+            }
+        }
+
+        // ۲. بررسی وجود Attempt فعال یا تکمیل‌شده
+        $hasActiveOrCompletedAttempt = Attempt::where('candidate_id', $candidate->id)
+            ->where(function ($q) use ($assignment) {
+                $q->where('candidate_assignment_id', $assignment->id)
+                  ->orWhere('exam_id', $assignment->exam_id);
+            })
+            ->whereIn('status', ['in_progress', 'disconnected', 'completed', 'auto_submitted'])
+            ->exists();
+
+        if ($hasActiveOrCompletedAttempt) {
+            return response()->json([
+                'success' => false,
+                'message' => 'امکان لغو تخصیص برای متقاضی دارای جلسه آزمون فعال، ناتمام یا تکمیل‌شده وجود ندارد.',
+            ], 422);
+        }
+
+        // ۳. اجرای عملیات لغو درون Database Transaction با قفل سطری
+        try {
+            DB::transaction(function () use ($request, $candidate, $assignment, $audit) {
+                // قفل ردیف تخصیص
+                $lockedAssignment = CandidateAssignment::whereKey($assignment->id)->lockForUpdate()->firstOrFail();
+                $computerId = $lockedAssignment->computer_id;
+
+                $snapshotData = [
+                    'assignment_id' => $lockedAssignment->id,
+                    'exam_id'       => $lockedAssignment->exam_id,
+                    'shift_id'      => $lockedAssignment->shift_id,
+                    'lab_id'        => $lockedAssignment->lab_id,
+                    'computer_id'   => $lockedAssignment->computer_id,
+                    'reason'        => $request->input('reason', 'لغو تخصیص توسط ناظر/مدیر سیستم'),
+                ];
+
+                // آزادسازی کامپیوتر در صورتی که در وضعیت exam باشد و هیچ attempt فعالی روی آن نباشد
+                if ($computerId) {
+                    $computer = Computer::whereKey($computerId)->lockForUpdate()->first();
+                    if ($computer && $computer->status === 'exam') {
+                        $isComputerInUse = Attempt::where('computer_id', $computerId)
+                            ->whereIn('status', ['in_progress', 'disconnected'])
+                            ->exists();
+
+                        if (!$isComputerInUse) {
+                            $computer->update(['status' => 'online']);
+                        }
+                    }
+                }
+
+                // ابطال کارت ورود و توکن QR قبلی
+                EntryCard::where('candidate_id', $candidate->id)->update([
+                    'qr_expires_at' => now()->subMinute(),
+                ]);
+
+                // بازنشانی وضعیت حضور و چک‌این متقاضی در صورت عدم شرکت در آزمون
+                if (in_array($candidate->status, ['present', 'late'])) {
+                    $candidate->update([
+                        'checked_in_at' => null,
+                        'status'        => 'present',
+                    ]);
+                }
+
+                // حذف فیزیکی رکورد تخصیص
+                $lockedAssignment->delete();
+
+                // ثبت دقیق در AuditLog
+                $audit->record(
+                    'candidates',
+                    'Candidate:unassigned',
+                    'Candidate',
+                    $candidate->id,
+                    $snapshotData,
+                    null
+                );
+            });
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'خطا در لغو تخصیص: ' . $e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تخصیص آزمون و صندلی متقاضی با موفقیت لغو شد و کارت ورود قبلی باطل گردید.',
         ]);
     }
 

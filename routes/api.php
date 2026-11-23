@@ -162,6 +162,7 @@ Route::prefix("v1")->group(function () {
                 Route::put("/{candidate}", [CandidateController::class, "update"]);
                 Route::delete("/{candidate}", [CandidateController::class, "destroy"]);
                 Route::post("/{candidate}/assign", [CandidateController::class, "assign"]);
+                Route::post("/{candidate}/unassign", [CandidateController::class, "unassign"]);
                 Route::post("/{candidate}/checkin", [CandidateController::class, "checkIn"]);
                 Route::post("/{candidate}/verify-identity", [CandidateController::class, "verifyIdentity"]);
                 Route::post("/{candidate}/reject-identity", [CandidateController::class, "rejectIdentity"]);
