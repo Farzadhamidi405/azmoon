@@ -70,10 +70,19 @@ export default function ExamQuestionPage() {
 
   const handleFinalSubmit = async () => {
     try {
-      await submitAttempt();
-      navigate('/candidate/done');
+      const res = await submitAttempt();
+      navigate('/candidate/done', {
+        state: {
+          result: res?.data || null,
+          attemptId: attempt?.id || null,
+        },
+      });
     } catch {
-      navigate('/candidate/done');
+      navigate('/candidate/done', {
+        state: {
+          attemptId: attempt?.id || null,
+        },
+      });
     }
   };
 

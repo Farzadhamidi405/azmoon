@@ -57,12 +57,22 @@ class ResultService
                 $answer = $answers->get($qId);
 
                 // بی‌پاسخ
-                if (!$answer || empty($answer->selected_option_ids)) {
+                if (!$answer || (empty($answer->selected_option_ids) && empty($answer->answer_text))) {
                     $sectionResults[$sectionId]['unanswered_count']++;
                     continue;
                 }
 
-                // بررسی صحت پاسخ از options_snapshot
+                // سوالات تشریحی و بدون گزینه: نیاز به تصحیح دستی توسط مصحح
+                if (empty($question->options_snapshot)) {
+                    // برای سوالات تشریحی تا زمان نمره‌دهی دستی، نمره خودکار صفر یا اشتباه ثبت نمی‌شود
+                    $answer->update([
+                        'is_correct'    => null,
+                        'score_awarded' => null,
+                    ]);
+                    continue;
+                }
+
+                // بررسی صحت پاسخ از options_snapshot برای سوالات عینی/تستی
                 $isCorrect = $this->checkAnswer($question, $answer);
 
                 if ($isCorrect) {
@@ -192,6 +202,50 @@ class ResultService
             'time_used'       => $attempt->started_at && $attempt->submitted_at
                 ? $attempt->started_at->diffInSeconds($attempt->submitted_at)
                 : null,
+        ];
+    }
+
+    /**
+     * دریافت نتیجه آزمون برای متقاضی (امن: بدون افشای کلیدهای پاسخ).
+     * بند 29 SRS.
+     */
+    public function getCandidateResult(Attempt $attempt): array
+    {
+        $result = $attempt->result;
+        $sectionResults = $attempt->sectionResults()->with('examSection:id,name')->get();
+        $exam = $attempt->exam;
+
+        $hasPendingManual = $attempt->answers()
+            ->whereHas('snapshotQuestion', fn($q) => $q->whereNull('options_snapshot')->orWhere('options_snapshot', '[]'))
+            ->whereNotNull('answer_text')
+            ->whereNull('score_awarded')
+            ->exists();
+
+        return [
+            'attempt_id'              => $attempt->id,
+            'exam_title'              => $exam?->title,
+            'total_marks'             => $exam?->total_marks ? (float) $exam->total_marks : null,
+            'pass_marks'              => $exam?->pass_marks ? (float) $exam->pass_marks : null,
+            'show_result_immediately' => (bool) ($exam?->show_result_immediately ?? false),
+            'status'                  => $attempt->status,
+            'submitted_at'            => $attempt->submitted_at?->toIso8601String(),
+            'has_pending_manual'      => $hasPendingManual,
+            'total_score'             => $result ? (float) $result->total_score : null,
+            'percentage'              => $result ? (float) $result->percentage : null,
+            'pass_fail'               => $result?->pass_fail,
+            'correct_count'           => $attempt->correct_count,
+            'wrong_count'             => $attempt->wrong_count,
+            'time_used_seconds'       => $attempt->started_at && $attempt->submitted_at
+                ? $attempt->started_at->diffInSeconds($attempt->submitted_at)
+                : null,
+            'section_results'         => $sectionResults->map(fn($sr) => [
+                'section_id'       => $sr->exam_section_id,
+                'section_name'     => $sr->examSection?->name ?? 'بخش ' . $sr->exam_section_id,
+                'score'            => (float) $sr->score,
+                'correct_count'    => $sr->correct_count,
+                'wrong_count'      => $sr->wrong_count,
+                'unanswered_count' => $sr->unanswered_count,
+            ])->values()->all(),
         ];
     }
 

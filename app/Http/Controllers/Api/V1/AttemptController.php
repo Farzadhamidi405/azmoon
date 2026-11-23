@@ -12,6 +12,7 @@ use App\Models\Exam;
 use App\Models\ExamSnapshot;
 use App\Models\Shift;
 use App\Services\ExamSnapshotService;
+use App\Services\ResultService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +33,10 @@ use RuntimeException;
 class AttemptController extends Controller
 {
     private const SNAPSHOT_CHANGED_MARKER = '__ATTEMPT_SNAPSHOT_CHANGED__';
+
+    public function __construct(private ResultService $resultService)
+    {
+    }
 
     /**
      * لیست جلسات آزمون برای مانیتورینگ زنده ادمین و ناظران.
@@ -813,16 +818,43 @@ class AttemptController extends Controller
             return response()->json(['success' => false, 'message' => 'دسترسی غیرمجاز.'], 403);
         }
 
+        // Idempotent: اگر قبلاً ثبت شده، همان نتیجه را بدون خطای ۴۲۲ برمی‌گردانیم
+        if (in_array($attempt->status, ['completed', 'auto_submitted'], true)) {
+            $candidateResult = $this->resultService->getCandidateResult($attempt);
+
+            return response()->json([
+                'success'      => true,
+                'message'      => 'این آزمون قبلاً ثبت نهایی شده است.',
+                'status'       => $attempt->status,
+                'submitted_at' => $attempt->submitted_at?->toIso8601String(),
+                'duplicate'    => true,
+                'data'         => $candidateResult,
+            ]);
+        }
+
         $maxSnapshotRetries = 3;
 
         for ($try = 1; $try <= $maxSnapshotRetries; $try++) {
             $snapshotAttempt = Attempt::query()->findOrFail($attempt->id);
             $snapshotComputerId = $snapshotAttempt->computer_id ? (int) $snapshotAttempt->computer_id : null;
 
+            if (in_array($snapshotAttempt->status, ['completed', 'auto_submitted'], true)) {
+                $candidateResult = $this->resultService->getCandidateResult($snapshotAttempt);
+
+                return response()->json([
+                    'success'      => true,
+                    'message'      => 'این آزمون قبلاً ثبت نهایی شده است.',
+                    'status'       => $snapshotAttempt->status,
+                    'submitted_at' => $snapshotAttempt->submitted_at?->toIso8601String(),
+                    'duplicate'    => true,
+                    'data'         => $candidateResult,
+                ]);
+            }
+
             if (!in_array($snapshotAttempt->status, ['in_progress', 'disconnected'], true)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'این آزمون قبلاً ثبت نهایی شده است.',
+                    'message' => 'وضعیت این آزمون امکان ثبت نهایی را ندارد.',
                 ], 422);
             }
 
@@ -842,44 +874,43 @@ class AttemptController extends Controller
                         throw new RuntimeException(self::SNAPSHOT_CHANGED_MARKER);
                     }
 
+                    if (in_array($lockedAttempt->status, ['completed', 'auto_submitted'], true)) {
+                        return [
+                            'error'        => false,
+                            'is_duplicate' => true,
+                            'status'       => $lockedAttempt->status,
+                            'submitted_at' => $lockedAttempt->submitted_at?->toIso8601String(),
+                        ];
+                    }
+
                     if (!in_array($lockedAttempt->status, ['in_progress', 'disconnected'], true)) {
                         return [
                             'error'   => true,
                             'status'  => 422,
-                            'message' => 'این آزمون قبلاً ثبت نهایی شده است.',
+                            'message' => 'وضعیت این آزمون امکان ثبت نهایی را ندارد.',
                         ];
                     }
 
                     $now = now();
-
-                    if ($lockedAttempt->isTimeExpired()) {
-                        $lockedAttempt->update([
-                            'status'       => 'auto_submitted',
-                            'submitted_at' => $now,
-                        ]);
-
-                        $lockedAttempt->candidate?->update(['status' => 'completed']);
-                        $this->releaseComputerIfIdle($lockedComputer, $lockedAttempt->id);
-
-                        return [
-                            'error'          => false,
-                            'auto_submitted' => true,
-                            'submitted_at'   => $now->toIso8601String(),
-                        ];
-                    }
+                    $finalStatus = $lockedAttempt->isTimeExpired() ? 'auto_submitted' : 'completed';
 
                     $lockedAttempt->update([
-                        'status'       => 'completed',
+                        'status'       => $finalStatus,
                         'submitted_at' => $now,
                     ]);
 
                     $lockedAttempt->candidate?->update(['status' => 'completed']);
                     $this->releaseComputerIfIdle($lockedComputer, $lockedAttempt->id);
 
+                    // محاسبه اتمیک نمره و کارنامه آزمون
+                    $this->resultService->calculate($lockedAttempt);
+
                     return [
                         'error'          => false,
-                        'auto_submitted' => false,
-                        'submitted_at'   => $lockedAttempt->fresh()->submitted_at?->toIso8601String(),
+                        'is_duplicate'   => false,
+                        'auto_submitted' => $finalStatus === 'auto_submitted',
+                        'status'         => $finalStatus,
+                        'submitted_at'   => $now->toIso8601String(),
                     ];
                 }, 3);
 
@@ -890,11 +921,27 @@ class AttemptController extends Controller
                     ], $outcome['status']);
                 }
 
+                $attempt->refresh();
+                $candidateResult = $this->resultService->getCandidateResult($attempt);
+
+                if ($outcome['is_duplicate'] ?? false) {
+                    return response()->json([
+                        'success'      => true,
+                        'message'      => 'این آزمون قبلاً با موفقیت ثبت نهایی شده است.',
+                        'status'       => $outcome['status'],
+                        'submitted_at' => $outcome['submitted_at'],
+                        'duplicate'    => true,
+                        'data'         => $candidateResult,
+                    ]);
+                }
+
                 if ($outcome['auto_submitted']) {
                     return response()->json([
-                        'success' => true,
-                        'message' => 'زمان آزمون به پایان رسیده و پاسخ‌های شما به‌صورت خودکار ثبت شد.',
-                        'status'  => 'auto_submitted',
+                        'success'      => true,
+                        'message'      => 'زمان آزمون به پایان رسیده و پاسخ‌های شما به‌صورت خودکار ثبت شد.',
+                        'status'       => 'auto_submitted',
+                        'submitted_at' => $outcome['submitted_at'],
+                        'data'         => $candidateResult,
                     ]);
                 }
 
@@ -903,6 +950,7 @@ class AttemptController extends Controller
                     'message'      => 'آزمون شما با موفقیت ثبت نهایی شد.',
                     'status'       => 'completed',
                     'submitted_at' => $outcome['submitted_at'],
+                    'data'         => $candidateResult,
                 ]);
             } catch (RuntimeException $e) {
                 if ($e->getMessage() === self::SNAPSHOT_CHANGED_MARKER) {
@@ -921,7 +969,7 @@ class AttemptController extends Controller
     /**
      * ثبت خودکار آزمون در صورت اتمام زمان سرور با رعایت ترتیب قفل Computer (id ASC) -> Attempt (id ASC).
      */
-    private function autoSubmit(Attempt $attempt): void
+    public function autoSubmit(Attempt $attempt): void
     {
         $maxSnapshotRetries = 3;
 
@@ -960,6 +1008,9 @@ class AttemptController extends Controller
 
                     $lockedAttempt->candidate?->update(['status' => 'completed']);
                     $this->releaseComputerIfIdle($lockedComputer, $lockedAttempt->id);
+
+                    // محاسبه اتمیک نمره و کارنامه آزمون
+                    $this->resultService->calculate($lockedAttempt);
                 }, 3);
 
                 $attempt->refresh();
@@ -971,6 +1022,36 @@ class AttemptController extends Controller
                 throw $e;
             }
         }
+    }
+
+    /**
+     * مشاهده نتیجه آزمون توسط داوطلب صاحب تلاش آزمون.
+     * بند 29 SRS.
+     */
+    public function candidateResult(Attempt $attempt): JsonResponse
+    {
+        $candidate = auth('candidate')->user();
+
+        if (!$candidate || (int) $attempt->candidate_id !== (int) $candidate->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'دسترسی غیرمجاز.',
+            ], 403);
+        }
+
+        if (!in_array($attempt->status, ['completed', 'auto_submitted'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'نتیجه این آزمون هنوز آماده نیست یا آزمون در حال برگزاری است.',
+            ], 422);
+        }
+
+        $data = $this->resultService->getCandidateResult($attempt);
+
+        return response()->json([
+            'success' => true,
+            'data'    => $data,
+        ]);
     }
 
     /**

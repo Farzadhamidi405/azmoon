@@ -294,6 +294,7 @@ Route::prefix("v1")->group(function () {
             Route::post("attempts/{attempt}/answer", [AttemptController::class, "saveAnswer"]);
             Route::post("attempts/{attempt}/heartbeat", [AttemptController::class, "heartbeat"]);
             Route::post("attempts/{attempt}/submit", [AttemptController::class, "submit"]);
+            Route::get("attempts/{attempt}/result", [AttemptController::class, "candidateResult"]);
 
             // ─── Anti-Cheat — Candidate ────────────────────────────
             // بند 20 SRS — ثبت رویداد مشکوک از Frontend
@@ -309,6 +310,7 @@ Route::prefix("v1")->group(function () {
             Route::post("{attempt}/answer", [AttemptController::class, "saveAnswer"]);
             Route::post("{attempt}/heartbeat", [AttemptController::class, "heartbeat"]);
             Route::post("{attempt}/submit", [AttemptController::class, "submit"]);
+            Route::get("{attempt}/result", [AttemptController::class, "candidateResult"]);
             Route::post("{attempt}/anti-cheat/event", [AntiCheatController::class, "recordEvent"]);
         });
 
