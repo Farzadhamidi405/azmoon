@@ -100,7 +100,7 @@ Route::prefix("v1")->group(function () {
                 Route::post('/', [IncidentController::class, 'store']);
                 Route::get('/{incident}', [IncidentController::class, 'show']);
                 Route::put('/{incident}', [IncidentController::class, 'update']);
-                Route::patch('/{incident}/resolve', [IncidentController::class, 'resolve']);
+                Route::match(['patch', 'post'], '/{incident}/resolve', [IncidentController::class, 'resolve']);
             });
 
 

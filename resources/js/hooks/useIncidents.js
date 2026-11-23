@@ -45,8 +45,14 @@ export default function useIncidents(filters = {}) {
     return unwrapItem(res.data);
   };
 
-  const resolve = async (id, data) => {
-    const res = await api.post(`${API_BASE}/admin/incidents/${id}/resolve`, data);
+  const update = async (id, data) => {
+    const res = await api.put(`${API_BASE}/admin/incidents/${id}`, data);
+    reload();
+    return unwrapItem(res.data);
+  };
+
+  const resolve = async (id, data = {}) => {
+    const res = await api.patch(`${API_BASE}/admin/incidents/${id}/resolve`, data);
     reload();
     return unwrapItem(res.data);
   };
@@ -58,6 +64,7 @@ export default function useIncidents(filters = {}) {
     error,
     reload,
     report,
+    update,
     resolve,
   };
 }

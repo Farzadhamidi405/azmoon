@@ -40,15 +40,15 @@ class IncidentController extends Controller
             $query->where('status', $request->status);
         }
 
-        // فیلتر بر اساس نوع حادثه (مثلاً anti_cheat)
-        if ($request->filled('incident_type')) {
+        // فیلتر بر اساس نوع حادثه (مثلاً anti_cheat) در صورت وجود ستون
+        if ($request->filled('incident_type') && \Illuminate\Support\Facades\Schema::hasColumn('incidents', 'incident_type')) {
             $query->where('incident_type', $request->incident_type);
-        } elseif ($request->filled('type')) {
+        } elseif ($request->filled('type') && \Illuminate\Support\Facades\Schema::hasColumn('incidents', 'incident_type')) {
             $query->where('incident_type', $request->type);
         }
 
-        // فیلتر بر اساس شدت حادثه
-        if ($request->filled('severity')) {
+        // فیلتر بر اساس شدت حادثه در صورت وجود ستون
+        if ($request->filled('severity') && \Illuminate\Support\Facades\Schema::hasColumn('incidents', 'severity')) {
             $query->where('severity', $request->severity);
         }
 
@@ -67,13 +67,14 @@ class IncidentController extends Controller
             $query->whereDate('occurred_at', $request->date);
         }
 
-        // جستجو در عنوان، شرح یا نام داوطلب
+        // جستجو در شرح مشکل، اقدام انجام‌شده، متقاضی یا کامپیوتر
         if ($request->filled('search')) {
             $s = $request->search;
             $query->where(function ($sub) use ($s) {
-                $sub->where('title', 'like', "%{$s}%")
-                    ->orWhere('description', 'like', "%{$s}%")
-                    ->orWhereHas('candidate', fn($c) => $c->where('name', 'like', "%{$s}%")->orWhere('candidate_code', 'like', "%{$s}%"));
+                $sub->where('problem_description', 'like', "%{$s}%")
+                    ->orWhere('action_taken', 'like', "%{$s}%")
+                    ->orWhereHas('candidate', fn($c) => $c->where('name', 'like', "%{$s}%")->orWhere('candidate_code', 'like', "%{$s}%"))
+                    ->orWhereHas('computer', fn($comp) => $comp->where('computer_code', 'like', "%{$s}%"));
             });
         }
 

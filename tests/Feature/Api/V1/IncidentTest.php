@@ -533,4 +533,41 @@ class IncidentTest extends TestCase
                  ->assertJsonPath('success', true)
                  ->assertJsonPath('data.status', 'resolved');
     }
+
+    #[Test]
+    public function incidents_can_be_searched_by_problem_description(): void
+    {
+        Sanctum::actingAs($this->labManager, [], 'admin');
+
+        $this->createIncident(['problem_description' => 'خرابی کابل شبکه مانیتور']);
+        $this->createIncident(['problem_description' => 'خاموشی ناگهانی پاور']);
+
+        $response = $this->getJson('/api/v1/admin/incidents?search=کابل');
+
+        $response->assertOk()
+                 ->assertJsonPath('success', true);
+
+        $items = $response->json('data.data');
+        $this->assertCount(1, $items);
+        $this->assertStringContainsString('کابل', $items[0]['problem_description']);
+    }
+
+    #[Test]
+    public function incidents_can_be_paginated(): void
+    {
+        Sanctum::actingAs($this->labManager, [], 'admin');
+
+        for ($i = 0; $i < 15; $i++) {
+            $this->createIncident(['problem_description' => "حادثه تست شماره {$i}"]);
+        }
+
+        $response = $this->getJson('/api/v1/admin/incidents?per_page=5&page=2');
+
+        $response->assertOk()
+                 ->assertJsonPath('data.per_page', 5)
+                 ->assertJsonPath('data.current_page', 2);
+
+        $items = $response->json('data.data');
+        $this->assertCount(5, $items);
+    }
 }
