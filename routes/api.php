@@ -49,6 +49,7 @@ Route::prefix("v1")->group(function () {
 
         Route::middleware("auth:candidate")->group(function () {
             Route::get("candidate/me", [CandidateAuthController::class, "me"]);
+            Route::get("candidate/dashboard", [CandidateAuthController::class, "dashboard"]);
         });
 
         Route::post("forgot-password", [StaffAuthController::class, "forgotPassword"]);

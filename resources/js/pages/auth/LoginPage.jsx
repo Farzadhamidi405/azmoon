@@ -46,7 +46,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const data = await login(form);
-      navigate(data.actorType === 'candidate' ? '/exam/instructions' : '/admin/dashboard', { replace: true });
+      navigate(data.actorType === 'candidate' ? '/candidate/dashboard' : '/admin/dashboard', { replace: true });
     } catch (err) {
       setError(getErrorMessage(err, TEXT.fallbackError));
     } finally {

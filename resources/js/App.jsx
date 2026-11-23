@@ -57,6 +57,7 @@ const SettingsPage = React.lazy(() => import('./pages/admin/SettingsPage.jsx'));
 const BackupsPage = React.lazy(() => import('./pages/admin/BackupsPage.jsx'));
 
 // Candidate Exam Pages (Lazy Loaded)
+const CandidateDashboardPage = React.lazy(() => import('./pages/candidate/CandidateDashboardPage.jsx'));
 const ExamInstructionsPage = React.lazy(() => import('./pages/candidate/ExamInstructionsPage.jsx'));
 const ExamQuestionPage = React.lazy(() => import('./pages/candidate/ExamQuestionPage.jsx'));
 const ExamDonePage = React.lazy(() => import('./pages/candidate/ExamDonePage.jsx'));
@@ -130,14 +131,16 @@ export default function App() {
                 <Route element={<RequireAuth requiredActorType="candidate" />}>
                   {/* Standard /exam layout */}
                   <Route path="/exam" element={<CandidateLayout />}>
-                    <Route index element={<Navigate to="/exam/instructions" replace />} />
+                    <Route index element={<Navigate to="/exam/dashboard" replace />} />
+                    <Route path="dashboard" element={<CandidateDashboardPage />} />
                     <Route path="instructions" element={<ExamInstructionsPage />} />
                     <Route path="question" element={<ExamQuestionPage />} />
                     <Route path="done" element={<ExamDonePage />} />
                   </Route>
                   {/* Direct /candidate aliases */}
-                  <Route path="/candidate">
-                    <Route index element={<Navigate to="/candidate/instructions" replace />} />
+                  <Route path="/candidate" element={<CandidateLayout />}>
+                    <Route index element={<Navigate to="/candidate/dashboard" replace />} />
+                    <Route path="dashboard" element={<CandidateDashboardPage />} />
                     <Route path="instructions" element={<ExamInstructionsPage />} />
                     <Route path="exam" element={<ExamQuestionPage />} />
                     <Route path="done" element={<ExamDonePage />} />
