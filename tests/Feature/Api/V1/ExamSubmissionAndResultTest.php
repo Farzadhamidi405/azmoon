@@ -586,4 +586,140 @@ class ExamSubmissionAndResultTest extends TestCase
         $this->assertEquals(1, $res->json('data.correct_count'));
         $this->assertEquals(0, $res->json('data.wrong_count'));
     }
+
+    #[Test]
+    public function auto_submit_command_is_registered_in_scheduler(): void
+    {
+        $schedule = app(\Illuminate\Console\Scheduling\Schedule::class);
+        $events = collect($schedule->events());
+
+        $autoSubmitEvent = $events->first(function ($event) {
+            return str_contains($event->command ?? '', 'attempts:auto-submit-expired');
+        });
+
+        $this->assertNotNull($autoSubmitEvent, 'دستور attempts:auto-submit-expired در لاراول اسکلولر ثبت نشده است.');
+        $this->assertEquals('* * * * *', $autoSubmitEvent->expression);
+        $this->assertTrue($autoSubmitEvent->withoutOverlapping);
+    }
+
+    #[Test]
+    public function schedule_list_includes_auto_submit_command(): void
+    {
+        Artisan::call('schedule:list');
+        $output = Artisan::output();
+
+        $this->assertStringContainsString('attempts:auto-submit-expired', $output);
+    }
+
+    #[Test]
+    public function hidden_results_do_not_expose_total_score_percentage_pass_fail_or_sections(): void
+    {
+        $bundle = $this->createAttemptWithQuestions(['show_result_immediately' => false]);
+        $candidate = $bundle['candidate'];
+        $attempt = $bundle['attempt'];
+        $questions = $bundle['questions'];
+
+        $this->createAnswer($attempt, $questions[0], ['selected_option_ids' => [101]]);
+
+        // ۱. بررسی محافظت در پاسخ submit
+        $submitRes = $this->actingAs($candidate, 'candidate')
+            ->postJson("/api/v1/attempts/{$attempt->id}/submit");
+
+        $submitRes->assertStatus(200);
+        $submitData = $submitRes->json('data');
+
+        $this->assertFalse($submitData['show_result_immediately']);
+        $this->assertArrayNotHasKey('total_score', $submitData);
+        $this->assertArrayNotHasKey('percentage', $submitData);
+        $this->assertArrayNotHasKey('pass_fail', $submitData);
+        $this->assertArrayNotHasKey('correct_count', $submitData);
+        $this->assertArrayNotHasKey('wrong_count', $submitData);
+        $this->assertArrayNotHasKey('section_results', $submitData);
+
+        // ۲. بررسی محافظت در درخواست مستقیم اندپوینت کارنامه /result
+        $resultRes = $this->actingAs($candidate, 'candidate')
+            ->getJson("/api/v1/attempts/{$attempt->id}/result");
+
+        $resultRes->assertStatus(200);
+        $resultData = $resultRes->json('data');
+
+        $this->assertFalse($resultData['show_result_immediately']);
+        $this->assertArrayNotHasKey('total_score', $resultData);
+        $this->assertArrayNotHasKey('percentage', $resultData);
+        $this->assertArrayNotHasKey('pass_fail', $resultData);
+        $this->assertArrayNotHasKey('correct_count', $resultData);
+        $this->assertArrayNotHasKey('wrong_count', $resultData);
+        $this->assertArrayNotHasKey('section_results', $resultData);
+
+        // بررسی فیلدهای غیرحساس که جهت تأیید دریافت پاسخنامه باید حفظ شوند
+        $this->assertEquals($attempt->id, $resultData['attempt_id']);
+        $this->assertEquals('آزمون تستی فاز ۳', $resultData['exam_title']);
+        $this->assertEquals(100.00, (float) $resultData['total_marks']);
+        $this->assertEquals(50.00, (float) $resultData['pass_marks']);
+    }
+
+    #[Test]
+    public function visible_results_still_return_permitted_fields(): void
+    {
+        $bundle = $this->createAttemptWithQuestions(['show_result_immediately' => true]);
+        $candidate = $bundle['candidate'];
+        $attempt = $bundle['attempt'];
+        $questions = $bundle['questions'];
+
+        $this->createAnswer($attempt, $questions[0], ['selected_option_ids' => [101]]);
+
+        $this->actingAs($candidate, 'candidate')
+            ->postJson("/api/v1/attempts/{$attempt->id}/submit")
+            ->assertStatus(200);
+
+        $res = $this->actingAs($candidate, 'candidate')
+            ->getJson("/api/v1/attempts/{$attempt->id}/result");
+
+        $res->assertStatus(200);
+        $data = $res->json('data');
+
+        $this->assertTrue($data['show_result_immediately']);
+        $this->assertArrayHasKey('total_score', $data);
+        $this->assertArrayHasKey('percentage', $data);
+        $this->assertArrayHasKey('pass_fail', $data);
+        $this->assertArrayHasKey('correct_count', $data);
+        $this->assertArrayHasKey('wrong_count', $data);
+        $this->assertArrayHasKey('section_results', $data);
+        $this->assertEquals(25.00, (float) $data['total_score']);
+    }
+
+    #[Test]
+    public function pending_manual_grading_is_not_presented_as_final_pass_fail(): void
+    {
+        $bundle = $this->createAttemptWithQuestions(['show_result_immediately' => true]);
+        $candidate = $bundle['candidate'];
+        $attempt = $bundle['attempt'];
+        $questions = $bundle['questions'];
+
+        $questions[3]->update([
+            'question_type_snapshot' => 'short_answer',
+            'options_snapshot'       => [],
+        ]);
+
+        $this->createAnswer($attempt, $questions[3], [
+            'answer_text'         => 'پاسخ متنی تشریحی',
+            'selected_option_ids' => null,
+        ]);
+
+        $this->actingAs($candidate, 'candidate')
+            ->postJson("/api/v1/attempts/{$attempt->id}/submit")
+            ->assertStatus(200);
+
+        $res = $this->actingAs($candidate, 'candidate')
+            ->getJson("/api/v1/attempts/{$attempt->id}/result");
+
+        $res->assertStatus(200);
+        $data = $res->json('data');
+
+        $this->assertTrue($data['has_pending_manual']);
+        $this->assertFalse($data['is_finalized']);
+        $this->assertEquals('pending_manual_grading', $data['pass_fail']);
+        $this->assertNotEquals('pass', $data['pass_fail']);
+        $this->assertNotEquals('fail', $data['pass_fail']);
+    }
 }

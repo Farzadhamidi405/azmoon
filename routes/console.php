@@ -10,6 +10,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('attempts:detect-disconnected')->everyMinute()->withoutOverlapping();
+Schedule::command('attempts:auto-submit-expired')->everyMinute()->withoutOverlapping();
 
 // Scheduled database backup (disabled by default, see config/backup.php).
 BackupScheduleRegistrar::registerFromConfig(app(\Illuminate\Console\Scheduling\Schedule::class));

@@ -206,14 +206,15 @@ class ResultService
     }
 
     /**
-     * دریافت نتیجه آزمون برای متقاضی (امن: بدون افشای کلیدهای پاسخ).
+     * دریافت نتیجه آزمون برای متقاضی (امن: بدون افشای کلیدهای پاسخ و با رعایت show_result_immediately).
      * بند 29 SRS.
      */
     public function getCandidateResult(Attempt $attempt): array
     {
         $result = $attempt->result;
-        $sectionResults = $attempt->sectionResults()->with('examSection:id,name')->get();
         $exam = $attempt->exam;
+
+        $showImmediately = (bool) ($exam?->show_result_immediately ?? false);
 
         $hasPendingManual = $attempt->answers()
             ->whereHas('snapshotQuestion', fn($q) => $q->whereNull('options_snapshot')->orWhere('options_snapshot', '[]'))
@@ -221,23 +222,37 @@ class ResultService
             ->whereNull('score_awarded')
             ->exists();
 
-        return [
+        $baseData = [
             'attempt_id'              => $attempt->id,
             'exam_title'              => $exam?->title,
             'total_marks'             => $exam?->total_marks ? (float) $exam->total_marks : null,
             'pass_marks'              => $exam?->pass_marks ? (float) $exam->pass_marks : null,
-            'show_result_immediately' => (bool) ($exam?->show_result_immediately ?? false),
+            'show_result_immediately' => $showImmediately,
             'status'                  => $attempt->status,
             'submitted_at'            => $attempt->submitted_at?->toIso8601String(),
             'has_pending_manual'      => $hasPendingManual,
-            'total_score'             => $result ? (float) $result->total_score : null,
-            'percentage'              => $result ? (float) $result->percentage : null,
-            'pass_fail'               => $result?->pass_fail,
-            'correct_count'           => $attempt->correct_count,
-            'wrong_count'             => $attempt->wrong_count,
             'time_used_seconds'       => $attempt->started_at && $attempt->submitted_at
                 ? $attempt->started_at->diffInSeconds($attempt->submitted_at)
                 : null,
+        ];
+
+        // در صورت عدم اجازه مشاهده فوری نتایج، نمرات، درصد، قبولی/ردی و ریزنمرات کاملاً پنهان می‌شوند
+        if (!$showImmediately) {
+            return $baseData;
+        }
+
+        $sectionResults = $attempt->sectionResults()->with('examSection:id,name')->get();
+
+        // اگر آزمون شامل سوالات تشریحی در انتظار تصحیح دستی باشد، وضعیت قبولی/ردی قطعی ارائه نمی‌شود
+        $passFailStatus = $hasPendingManual ? 'pending_manual_grading' : $result?->pass_fail;
+
+        return array_merge($baseData, [
+            'is_finalized'            => !$hasPendingManual,
+            'total_score'             => $result ? (float) $result->total_score : null,
+            'percentage'              => $result ? (float) $result->percentage : null,
+            'pass_fail'               => $passFailStatus,
+            'correct_count'           => $attempt->correct_count,
+            'wrong_count'             => $attempt->wrong_count,
             'section_results'         => $sectionResults->map(fn($sr) => [
                 'section_id'       => $sr->exam_section_id,
                 'section_name'     => $sr->examSection?->name ?? 'بخش ' . $sr->exam_section_id,
@@ -246,7 +261,7 @@ class ResultService
                 'wrong_count'      => $sr->wrong_count,
                 'unanswered_count' => $sr->unanswered_count,
             ])->values()->all(),
-        ];
+        ]);
     }
 
     /**

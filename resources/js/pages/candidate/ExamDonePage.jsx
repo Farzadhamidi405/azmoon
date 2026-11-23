@@ -94,12 +94,18 @@ export default function ExamDonePage() {
               <span className="font-black text-navy text-sm">کارنامه اولیه آزمون</span>
               <span
                 className={`px-3 py-1 rounded-full text-xs font-black ${
-                  isPassed
+                  result?.pass_fail === 'pending_manual_grading'
+                    ? 'bg-gold/15 text-gold border border-gold/30'
+                    : isPassed
                     ? 'bg-teal-soft text-teal border border-teal/20'
                     : 'bg-red/10 text-red border border-red/20'
                 }`}
               >
-                {isPassed ? 'قبول (Passed)' : 'ناموفق (Failed)'}
+                {result?.pass_fail === 'pending_manual_grading'
+                  ? 'در انتظار تصحیح تشریحی'
+                  : isPassed
+                  ? 'قبول (Passed)'
+                  : 'ناموفق (Failed)'}
               </span>
             </div>
 
