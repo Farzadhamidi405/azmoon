@@ -565,6 +565,10 @@ export default function CandidatesPage({ action = null }) {
         }}
         candidate={selectedCandidate}
         onOpenCard={(cand) => handleViewEntryCard(cand)}
+        onAssign={(cand) => {
+          setAssignCandidate(cand);
+          setAssignOpen(true);
+        }}
         onEdit={(cand) => {
           setEditingCandidate(cand);
           setFormOpen(true);

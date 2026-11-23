@@ -17,6 +17,7 @@ export default function CandidateDetailModal({
   candidate = null,
   onOpenCard = null,
   onEdit = null,
+  onAssign = null,
 }) {
   if (!candidate) return null;
 
@@ -153,6 +154,18 @@ export default function CandidateDetailModal({
         {/* دکمه‌های پایانی عملیات */}
         <div className="flex items-center justify-between pt-3 border-t border-line">
           <div className="flex items-center gap-2">
+            {onAssign && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onClose();
+                  onAssign(candidate);
+                }}
+              >
+                🎯 تخصیص آزمون
+              </Button>
+            )}
             {onOpenCard && (
               <Button
                 variant="outline"
