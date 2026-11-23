@@ -156,12 +156,16 @@ Route::prefix("v1")->group(function () {
                 Route::post("/bulk-generate", [CandidateController::class, "bulkGenerate"]);
                 Route::post("/import", [CandidateController::class, "import"]);
                 Route::get("/entry-cards", [CandidateController::class, "allEntryCards"]);
+                Route::post("/verify-qr", [CandidateController::class, "verifyQr"]);
                 Route::get("/{candidate}", [CandidateController::class, "show"]);
                 Route::put("/{candidate}", [CandidateController::class, "update"]);
                 Route::delete("/{candidate}", [CandidateController::class, "destroy"]);
                 Route::post("/{candidate}/assign", [CandidateController::class, "assign"]);
                 Route::post("/{candidate}/checkin", [CandidateController::class, "checkIn"]);
+                Route::post("/{candidate}/verify-identity", [CandidateController::class, "verifyIdentity"]);
+                Route::post("/{candidate}/reject-identity", [CandidateController::class, "rejectIdentity"]);
                 Route::get("/{candidate}/entry-card", [CandidateController::class, "entryCard"]);
+                Route::post("/{candidate}/regenerate-card", [CandidateController::class, "regenerateEntryCard"]);
             });
 
             // ─── Shift Management ───────────────────────────────────

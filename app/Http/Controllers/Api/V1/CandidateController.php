@@ -17,7 +17,9 @@ use App\Models\Lab;
 use App\Models\Computer;
 use App\Models\AuditLog;
 use App\Models\EntryCard;
+use App\Models\Incident;
 use App\Services\CandidateImportService;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -664,112 +666,281 @@ class CandidateController extends Controller
 
 
 
-        /**
-     * Check-in a candidate — ثبت حضور و تأیید هویت متقاضی.
-     * فقط متقاضیانی که هنوز check-in نشده‌اند قابل check-in هستند.
+    /**
+     * Check-in a candidate — ثبت حضور متقاضی.
+     * قوانین:
+     * - باید حساب معتبر داشته باشد.
+     * - باید به یک آزمون/شیفت تخصیص یافته باشد.
+     * - وضعیتش نباید disqualified (رد هویت) باشد.
+     * - چک‌این تکراری مجاز نیست.
      */
     public function checkIn(Candidate $candidate): JsonResponse
     {
-        // اگر قبلاً check-in شده، خطا برگردان
-        if ($candidate->checked_in_at !== null) {
+        // 1. بررسی تخصیص آزمون
+        $assignment = $candidate->assignments()->latest()->first();
+        if (!$assignment) {
             return response()->json([
                 'success' => false,
-                'message' => 'این متقاضی قبلاً Check-in شده است.',
-                'data'    => ['checked_in_at' => $candidate->checked_in_at],
+                'message' => 'این متقاضی هنوز به هیچ آزمون یا شیفتی تخصیص نیافته است و امکان Check-in وجود ندارد.',
             ], 422);
         }
 
-        // ثبت زمان check-in و تغییر وضعیت به present
+        // 2. بررسی عدم محرومیت و رد هویت
+        if ($candidate->status === 'disqualified') {
+            return response()->json([
+                'success' => false,
+                'message' => 'هویت این متقاضی قبلاً رد شده است و مجاز به حضور در جلسه آزمون نمی‌باشد.',
+            ], 422);
+        }
+
+        // 3. بررسی عدم ثبت تکراری حضور
+        if ($candidate->checked_in_at !== null || in_array($candidate->status, ['present', 'in_progress', 'completed'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حضور این متقاضی قبلاً در سیستم ثبت (Check-in) شده است.',
+                'data'    => [
+                    'checked_in_at' => $candidate->checked_in_at,
+                    'status'        => $candidate->status,
+                ],
+            ], 422);
+        }
+
+        $now = now();
+
+        // 4. ثبت زمان حضور در سرور و تغییر وضعیت
         $candidate->update([
-            'checked_in_at' => now(),
+            'checked_in_at' => $now,
             'status'        => 'present',
         ]);
 
-        // ثبت در Audit Log
+        // 5. ثبت در لاگ ممیزی
+        $user = auth('admin')->user();
         AuditLog::create([
-            'user_id'     => auth('admin')->id(),
-            'role'        => auth('admin')->user()->role->name ?? null,
-            'action'      => 'CheckedIn',
+            'user_id'     => $user?->id,
+            'role'        => $user?->role?->name ?? 'Exam Administrator',
+            'action'      => 'Candidate:checked_in',
             'module'      => 'candidates',
             'target_type' => 'Candidate',
             'target_id'   => $candidate->id,
-            'old_value'   => ['status' => 'absent', 'checked_in_at' => null],
-            'new_value'   => ['status' => 'present', 'checked_in_at' => $candidate->checked_in_at],
+            'old_value'   => json_encode(['status' => 'absent', 'checked_in_at' => null]),
+            'new_value'   => json_encode(['status' => 'present', 'checked_in_at' => $now->toIso8601String()]),
             'ip_address'  => request()->ip(),
             'user_agent'  => request()->userAgent(),
+            'created_at'  => $now,
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Check-in با موفقیت انجام شد.',
-            'data'    => $candidate->fresh(),
+            'message' => "حضور متقاضی «{$candidate->name}» با موفقیت ثبت (Check-in) شد.",
+            'data'    => $candidate->fresh()->load(['latestAssignment.exam', 'latestAssignment.shift', 'latestAssignment.lab', 'latestAssignment.computer']),
         ]);
     }
 
     /**
-     * Entry Card — تولید یا بازیابی کارت ورود با QR Token امن.
-     * QR Token یک‌بارمصرف و دارای تاریخ انقضا است.
+     * تأیید هویت متقاضی توسط مسئول آزمون (Verify Identity).
      */
-    /**
- * Entry Card — تولید یا بازیابی کارت ورود با QR Token امن.
- * QR Token یک‌بارمصرف و دارای تاریخ انقضا است.
- * بند 14 SRS و ERD V2.
- */
-public function entryCard(Candidate $candidate): JsonResponse
-{
-    // بررسی اینکه آیا assignment دارد
-    $assignment = $candidate->assignments()->latest()->first();
-
-    if (!$assignment) {
-        return response()->json(
-            [
+    public function verifyIdentity(Candidate $candidate): JsonResponse
+    {
+        // بررسی وجود تخصیص معتبر
+        $assignment = $candidate->assignments()->latest()->first();
+        if (!$assignment) {
+            return response()->json([
                 'success' => false,
-                'message' => 'این متقاضی هنوز به هیچ آزمون/شفتی تخصیص نیافته است.',
-            ],
-            422
-        );
+                'message' => 'این متقاضی فاقد تخصیص آزمون است؛ تأیید هویت جلسه قبل از تخصیص امکان‌پذیر نیست.',
+            ], 422);
+        }
+
+        if ($candidate->status === 'disqualified') {
+            return response()->json([
+                'success' => false,
+                'message' => 'هویت این متقاضی قبلاً رد و پرونده او محروم شده است.',
+            ], 422);
+        }
+
+        $user = auth('admin')->user();
+        AuditLog::create([
+            'user_id'     => $user?->id,
+            'role'        => $user?->role?->name ?? 'Exam Administrator',
+            'action'      => 'Candidate:identity_verified',
+            'module'      => 'candidates',
+            'target_type' => 'Candidate',
+            'target_id'   => $candidate->id,
+            'old_value'   => null,
+            'new_value'   => json_encode(['verified_at' => now()->toIso8601String(), 'verifier' => $user?->name]),
+            'ip_address'  => request()->ip(),
+            'user_agent'  => request()->userAgent(),
+            'created_at'  => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "هویت متقاضی «{$candidate->name}» با موفقیت تأیید گردید.",
+            'data'    => $candidate->load(['latestAssignment.exam', 'latestAssignment.shift', 'latestAssignment.lab', 'latestAssignment.computer']),
+        ]);
     }
 
-    // آخرین کارت ورود موجود را بررسی می‌کنیم
-    // از entryCards() (HasMany) استفاده می‌کنیم — نه entryCard()
-    $entryCard = $candidate->entryCards()->latest()->first();
+    /**
+     * رد هویت متقاضی همراه با ثبت اجباری دلیل و ایجاد حادثه (Reject Identity).
+     */
+    public function rejectIdentity(\Illuminate\Http\Request $request, Candidate $candidate): JsonResponse
+    {
+        $request->validate([
+            'reason' => ['required', 'string', 'min:5', 'max:1000'],
+        ], [
+            'reason.required' => 'ثبت دلیل رد هویت الزامی است.',
+            'reason.min'      => 'دلیل رد هویت باید حداقل ۵ کاراکتر باشد.',
+        ]);
 
-    if (!$entryCard || $entryCard->qr_expires_at->isPast()) {
-        // ساختن کارت جدید یا تجدید QR Token امن
+        $reason = trim($request->input('reason'));
+        $user = auth('admin')->user();
+        $now = now();
+
+        $oldStatus = $candidate->status;
+
+        // تغییر وضعیت به disqualified
+        $candidate->update([
+            'status' => 'disqualified',
+        ]);
+
+        // ثبت در جدول incidents
+        Incident::create([
+            'candidate_id'        => $candidate->id,
+            'computer_id'         => $candidate->latestAssignment?->computer_id,
+            'problem_description' => "رد هویت در درب ورود جلسه: {$reason}",
+            'action_taken'        => 'تغییر وضعیت متقاضی به محروم از آزمون (Disqualified)',
+            'responsible_user_id' => $user?->id,
+            'status'              => 'resolved',
+            'occurred_at'         => $now,
+            'resolved_at'         => $now,
+        ]);
+
+        // ثبت در AuditLog
+        AuditLog::create([
+            'user_id'     => $user?->id,
+            'role'        => $user?->role?->name ?? 'Exam Administrator',
+            'action'      => 'Candidate:identity_rejected',
+            'module'      => 'candidates',
+            'target_type' => 'Candidate',
+            'target_id'   => $candidate->id,
+            'old_value'   => json_encode(['status' => $oldStatus]),
+            'new_value'   => json_encode(['status' => 'disqualified', 'reason' => $reason, 'rejected_by' => $user?->name]),
+            'ip_address'  => request()->ip(),
+            'user_agent'  => request()->userAgent(),
+            'created_at'  => $now,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'عدم تطابق هویت متقاضی با موفقیت ثبت شد و وضعیت پرونده به محروم (Disqualified) تغییر یافت.',
+            'data'    => [
+                'candidate' => $candidate->fresh(),
+                'reason'    => $reason,
+            ],
+        ]);
+    }
+
+    /**
+     * Entry Card — تولید یا بازیابی کارت ورود با QR Token تصادفی امن و تاریخ انقضا.
+     */
+    public function entryCard(Candidate $candidate): JsonResponse
+    {
+        $assignment = $candidate->assignments()->latest()->first();
+
+        if (!$assignment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'این متقاضی هنوز به هیچ آزمون/شفتی تخصیص نیافته است.',
+            ], 422);
+        }
+
+        $entryCard = $candidate->entryCards()->latest()->first();
+
+        if (!$entryCard || $entryCard->isExpired()) {
+            $entryCard = $candidate->entryCards()->updateOrCreate(
+                ['candidate_id' => $candidate->id],
+                [
+                    'qr_token'      => bin2hex(random_bytes(32)), // توکن امن ۶۴ کاراکتری تصادفی
+                    'qr_expires_at' => now()->addDays(30),
+                    'printed_at'    => null,
+                ]
+            );
+        }
+
+        $assignment->load(['exam', 'shift', 'lab', 'computer']);
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'id'            => $entryCard->id,
+                'candidate'     => [
+                    'id'             => $candidate->id,
+                    'name'           => $candidate->name,
+                    'candidate_code' => $candidate->candidate_code,
+                    'username'       => $candidate->username,
+                    'national_id'    => $candidate->national_id,
+                    'status'         => $candidate->status,
+                ],
+                'exam'          => $assignment->exam?->title,
+                'shift'         => $assignment->shift?->name,
+                'shift_time'    => $assignment->shift?->start_time ? Carbon::parse($assignment->shift->start_time)->format('Y/m/d H:i') : '—',
+                'lab'           => $assignment->lab?->name,
+                'computer'      => $assignment->computer?->computer_code,
+                'qr_token'      => $entryCard->qr_token,
+                'qr_expires_at' => $entryCard->qr_expires_at,
+                'is_expired'    => $entryCard->isExpired(),
+                'printed_at'    => $entryCard->printed_at,
+            ],
+        ]);
+    }
+
+    /**
+     * صدور مجدد کارت ورود و ابطال توکن قبلی (Revoke & Regenerate).
+     */
+    public function regenerateEntryCard(Candidate $candidate): JsonResponse
+    {
+        $assignment = $candidate->assignments()->latest()->first();
+        if (!$assignment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'این متقاضی فاقد تخصیص آزمون است.',
+            ], 422);
+        }
+
+        // تولید توکن کاملاً جدید و تجدید انقضا
         $entryCard = $candidate->entryCards()->updateOrCreate(
             ['candidate_id' => $candidate->id],
             [
-                'qr_token'      => \Illuminate\Support\Str::random(64),
+                'qr_token'      => bin2hex(random_bytes(32)),
                 'qr_expires_at' => now()->addDays(30),
                 'printed_at'    => null,
             ]
         );
+
+        $assignment->load(['exam', 'shift', 'lab', 'computer']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'کارت ورود قبلی باطل و کارت جدید با توکن امن صادر شد.',
+            'data'    => [
+                'id'            => $entryCard->id,
+                'candidate'     => [
+                    'id'             => $candidate->id,
+                    'name'           => $candidate->name,
+                    'candidate_code' => $candidate->candidate_code,
+                    'username'       => $candidate->username,
+                ],
+                'exam'          => $assignment->exam?->title,
+                'shift'         => $assignment->shift?->name,
+                'lab'           => $assignment->lab?->name,
+                'computer'      => $assignment->computer?->computer_code,
+                'qr_token'      => $entryCard->qr_token,
+                'qr_expires_at' => $entryCard->qr_expires_at,
+            ],
+        ]);
     }
 
-    // بارگذاری اطلاعات assignment
-    $assignment->load(['exam', 'shift', 'lab', 'computer']);
-
-    return response()->json([
-        'success' => true,
-        'data'    => [
-            'candidate' => [
-                'id'             => $candidate->id,
-                'name'           => $candidate->name,
-                'candidate_code' => $candidate->candidate_code,
-            ],
-            'exam'         => $assignment->exam?->title,
-            'shift'        => $assignment->shift?->name,
-            'lab'          => $assignment->lab?->name,
-            'computer'     => $assignment->computer?->computer_code,
-            'qr_token'     => $entryCard->qr_token,
-            'qr_expires_at' => $entryCard->qr_expires_at,
-            'printed_at'   => $entryCard->printed_at,
-        ],
-    ]);
-}
-
     /**
-     * دریافت لیست کارت‌های ورود متقاضیان برای چاپ گروهی.
+     * دریافت کلیه کارت‌های ورود متقاضیان تخصیص‌یافته با QR واقعی برای چاپ جمعی.
      */
     public function allEntryCards(): JsonResponse
     {
@@ -782,40 +953,118 @@ public function entryCard(Candidate $candidate): JsonResponse
         ])
         ->whereNotNull('candidate_id')
         ->latest('id')
-        ->limit(100)
         ->get();
 
-        $data = $assignments->map(function ($a) {
-            return [
-                'id'       => 'card-' . $a->id,
-                'name'     => $a->candidate?->name ?? 'متقاضی',
-                'code'     => $a->candidate?->candidate_code ?? 'KND-' . $a->id,
-                'lab'      => ($a->lab?->name ?? 'Lab') . '/' . ($a->computer?->computer_code ?? 'PC-01'),
-                'time'     => $a->shift?->name ?? 'شیفت صبح',
-                'exam'     => $a->exam?->title ?? 'امتحان زبان انگلیسی',
-                'qr_token' => md5(($a->candidate?->candidate_code ?? 'KND') . ($a->id ?? 1)),
-            ];
-        });
+        $cards = [];
+        foreach ($assignments as $a) {
+            $cand = $a->candidate;
+            if (!$cand) continue;
 
-        // اگر هنوز تخصیصی در دیتابیس ثبت نشده بود، از جدول candidates لیست متقاضیان را بگیریم
-        if ($data->isEmpty()) {
-            $candidates = Candidate::latest('id')->limit(50)->get();
-            $data = $candidates->map(function ($c) {
-                return [
-                    'id'       => 'card-cand-' . $c->id,
-                    'name'     => $c->name,
-                    'code'     => $c->candidate_code,
-                    'lab'      => 'Lab1/PC-01',
-                    'time'     => 'شیفت آزمون',
-                    'exam'     => 'امتحان عمومی پوهنتون کندز',
-                    'qr_token' => md5($c->candidate_code),
-                ];
-            });
+            $entryCard = $cand->entryCards()->latest()->first();
+            if (!$entryCard || $entryCard->isExpired()) {
+                $entryCard = $cand->entryCards()->updateOrCreate(
+                    ['candidate_id' => $cand->id],
+                    [
+                        'qr_token'      => bin2hex(random_bytes(32)),
+                        'qr_expires_at' => now()->addDays(30),
+                    ]
+                );
+            }
+
+            $shiftTime = $a->shift?->start_time ? Carbon::parse($a->shift->start_time)->format('Y/m/d H:i') : ($a->shift?->name ?? 'شیفت رسمی');
+
+            $cards[] = [
+                'id'            => $entryCard->id,
+                'candidate_id'  => $cand->id,
+                'name'          => $cand->name,
+                'code'          => $cand->candidate_code,
+                'username'      => $cand->username,
+                'national_id'   => $cand->national_id,
+                'lab'           => $a->lab?->name ?? 'لابراتوار مرکزی',
+                'computer'      => $a->computer?->computer_code ?? 'صندلی اختصاصی',
+                'time'          => $shiftTime,
+                'exam'          => $a->exam?->title ?? 'آزمون عمومی',
+                'qr_token'      => $entryCard->qr_token,
+                'qr_expires_at' => $entryCard->qr_expires_at,
+                'status'        => $cand->status,
+            ];
         }
 
         return response()->json([
             'success' => true,
-            'data'    => $data,
+            'data'    => $cards,
+        ]);
+    }
+
+    /**
+     * استعلام و اعتبارسنجی QR Token در هنگام اسکن بارکد در درب ورود.
+     * توجه: اسکن QR فقط استعلام است و اقدام خودکار چک‌این انجام نمی‌دهد.
+     */
+    public function verifyQr(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $request->validate([
+            'qr_token' => ['required', 'string'],
+        ], [
+            'qr_token.required' => 'ارسال توکن QR الزامی است.',
+        ]);
+
+        $token = trim($request->input('qr_token'));
+        $card = EntryCard::where('qr_token', $token)->first();
+
+        if (!$card) {
+            return response()->json([
+                'success' => false,
+                'message' => 'کارت ورود یا توکن QR نامعتبر است و در سیستم یافت نشد.',
+            ], 404);
+        }
+
+        if ($card->isExpired()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'این کارت ورود منقضی شده است. لطفاً به مسئول ثبت‌نام مراجعه فرمایید.',
+                'data'    => [
+                    'qr_expires_at' => $card->qr_expires_at,
+                    'is_expired'    => true,
+                ],
+            ], 422);
+        }
+
+        $candidate = $card->candidate;
+        if (!$candidate) {
+            return response()->json([
+                'success' => false,
+                'message' => 'متقاضی مرتبط با این کارت یافت نشد.',
+            ], 404);
+        }
+
+        $assignment = $candidate->assignments()->with(['exam', 'shift', 'lab', 'computer'])->latest()->first();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'کارت ورود معتبر است.',
+            'data'    => [
+                'card_id'       => $card->id,
+                'qr_token'      => $card->qr_token,
+                'qr_expires_at' => $card->qr_expires_at,
+                'is_valid'      => true,
+                'candidate'     => [
+                    'id'             => $candidate->id,
+                    'name'           => $candidate->name,
+                    'candidate_code' => $candidate->candidate_code,
+                    'username'       => $candidate->username,
+                    'national_id'    => $candidate->national_id,
+                    'status'         => $candidate->status,
+                    'checked_in_at'  => $candidate->checked_in_at,
+                    'is_checked_in'  => $candidate->checked_in_at !== null,
+                ],
+                'assignment'    => $assignment ? [
+                    'exam'       => $assignment->exam?->title,
+                    'shift'      => $assignment->shift?->name,
+                    'shift_time' => $assignment->shift?->start_time ? Carbon::parse($assignment->shift->start_time)->format('Y/m/d H:i') : null,
+                    'lab'        => $assignment->lab?->name,
+                    'computer'   => $assignment->computer?->computer_code,
+                ] : null,
+            ],
         ]);
     }
 }

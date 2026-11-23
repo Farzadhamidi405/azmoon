@@ -89,9 +89,31 @@ export default function useCandidates(filters = {}) {
     return unwrapItem(res.data);
   };
 
+  const verifyIdentity = async (id) => {
+    const res = await api.post(`${API_BASE}/admin/candidates/${id}/verify-identity`);
+    reload();
+    return unwrapItem(res.data);
+  };
+
+  const rejectIdentity = async (id, reason) => {
+    const res = await api.post(`${API_BASE}/admin/candidates/${id}/reject-identity`, { reason });
+    reload();
+    return unwrapItem(res.data);
+  };
+
   const getEntryCard = async (id) => {
     const res = await api.get(`${API_BASE}/admin/candidates/${id}/entry-card`);
     return unwrapItem(res.data);
+  };
+
+  const regenerateEntryCard = async (id) => {
+    const res = await api.post(`${API_BASE}/admin/candidates/${id}/regenerate-card`);
+    return unwrapItem(res.data);
+  };
+
+  const verifyQr = async (qrToken) => {
+    const res = await api.post(`${API_BASE}/admin/candidates/verify-qr`, { qr_token: qrToken });
+    return res.data;
   };
 
   return {
@@ -109,6 +131,10 @@ export default function useCandidates(filters = {}) {
     remove,
     bulkGenerate,
     checkIn,
+    verifyIdentity,
+    rejectIdentity,
     getEntryCard,
+    regenerateEntryCard,
+    verifyQr,
   };
 }

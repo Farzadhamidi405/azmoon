@@ -16,6 +16,7 @@ import CandidateFormModal from '../../components/candidates/CandidateFormModal.j
 import CandidateBulkGenerateModal from '../../components/candidates/CandidateBulkGenerateModal.jsx';
 import CandidateAssignModal from '../../components/candidates/CandidateAssignModal.jsx';
 import CandidateDetailModal from '../../components/candidates/CandidateDetailModal.jsx';
+import QRCodeImage from '../../components/ui/QRCodeImage.jsx';
 import useCandidates from '../../hooks/useCandidates.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { api, unwrapList } from '../../lib/api.js';
@@ -618,11 +619,15 @@ export default function CandidatesPage({ action = null }) {
         >
           <div className="space-y-4 font-vazir">
             <div className="border-2 border-navy rounded-2xl p-4 bg-panel shadow-sm flex gap-4 text-xs">
-              {/* شبیه‌ساز QR Token امن */}
-              <div className="size-24 bg-paper border border-line rounded-xl p-2 flex flex-col items-center justify-center shrink-0 text-center">
-                <span className="text-2xl">🔲</span>
-                <span className="font-mono text-[9px] text-ink-soft truncate w-20 mt-1">
-                  {entryCardData.qr_token?.slice(0, 10)}...
+              {/* تصویر QR Code واقعی و استاندارد */}
+              <div className="shrink-0 flex flex-col items-center">
+                <QRCodeImage
+                  value={entryCardData.qr_token || `AZMOON:${entryCardData.candidate?.candidate_code}`}
+                  size={96}
+                  alt={`QR Code ${entryCardData.candidate?.candidate_code}`}
+                />
+                <span className="font-mono text-[9px] text-ink-soft truncate w-20 mt-1 text-center">
+                  {entryCardData.qr_token?.slice(0, 8)}...
                 </span>
               </div>
 
