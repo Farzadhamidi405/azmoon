@@ -205,7 +205,15 @@ class Attempt extends Model
      */
     public function isExpired(): bool
     {
-        return $this->expires_at->isPast();
+        return $this->expires_at ? $this->expires_at->isPast() : false;
+    }
+
+    /**
+     * نام مستعار برای سازگاری با کنترلرها.
+     */
+    public function isTimeExpired(): bool
+    {
+        return $this->isExpired();
     }
 
     /**

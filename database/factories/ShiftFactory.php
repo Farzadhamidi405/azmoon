@@ -14,7 +14,7 @@ class ShiftFactory extends Factory
 {
     public function definition(): array
     {
-        $start = now()->addHours(1);
+        $start = now()->subMinutes(15);
         return [
             'exam_id'    => Exam::factory(),
             'name'       => 'Shift ' . $this->faker->numberBetween(1, 5),

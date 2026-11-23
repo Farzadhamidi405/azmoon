@@ -61,18 +61,98 @@ class AttemptController extends Controller
 
     /**
      * شروع آزمون جدید یا بازیابی آزمون ناتمام (Resume).
+     * کلیه قوانین اعتبارسنجی سروری مطابق فاز ۵ اعمال می‌گردد.
      */
     public function start(Request $request): JsonResponse
     {
+        // ۱. بررسی احراز هویت متقاضی از طریق گارد مستقل candidate
         $candidate = auth('candidate')->user();
+        if (!$candidate) {
+            return response()->json([
+                'success' => false,
+                'message' => 'دسترسی غیرمجاز. فقط متقاضیان احراز هویت‌شده اجازه شروع آزمون را دارند.',
+            ], 401);
+        }
+
+        // ۲. بررسی فعال بودن حساب کاربری و عدم قفل یا انقضا
+        if ($candidate->isLocked() || $candidate->isCredentialExpired()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حساب کاربری شما قفل یا منقضی شده است. لطفاً با مسئول سالن آزمون تماس بگیرید.',
+            ], 403);
+        }
+
+        // ۳. بررسی عدم محرومیت متقاضی
+        if ($candidate->status === 'disqualified') {
+            return response()->json([
+                'success' => false,
+                'message' => 'شما از شرکت در این آزمون محروم شده‌اید و اجازه شروع آزمون را ندارید.',
+            ], 403);
+        }
+
+        // ۴. بررسی ثبت حضور در سالن (Check-in) و تأیید هویت
+        if ($candidate->checked_in_at === null && !in_array($candidate->status, ['present', 'in_progress', 'completed'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حضور شما در جلسه آزمون هنوز ثبت (Check-in) نشده است. لطفاً ابتدا به باجه تأیید هویت مراجعه فرمایید.',
+            ], 422);
+        }
+
+        // ۵. بررسی تخصیص معتبر آزمون به این متقاضی
+        $rawAssignment = CandidateAssignment::with(['exam', 'computer', 'shift'])
+            ->where('candidate_id', $candidate->id)
+            ->latest('id')
+            ->first();
+
+        if (!$rawAssignment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'هیچ تخصیص آزمونی برای شما یافت نشد. لطفاً به باجه ثبت‌نام مراجعه فرمایید.',
+            ], 422);
+        }
+
+        // ۶. بررسی وضعیت مجاز بودن آزمون (فقط published و running)
+        if (!$rawAssignment->exam || !in_array($rawAssignment->exam->status, ['published', 'running'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'آزمون تخصیص‌یافته در وضعیت مجاز برای برگزاری نمی‌باشد.',
+            ], 422);
+        }
+
+        // ۷. بررسی اختصاص کامپیوتر به متقاضی
+        if ($rawAssignment->computer_id === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'هیچ کامپیوتری به شما اختصاص داده نشده است. لطفاً به ناظر سالن مراجعه کنید.',
+            ], 422);
+        }
+
+        // ۸. بررسی بازه زمانی مجاز شیفت
+        $shift = $rawAssignment->shift;
+        if ($shift) {
+            $now = now();
+            if ($shift->start_time && $now->isBefore($shift->start_time)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'زمان برگزاری نوبت (شیفت) آزمون شما هنوز فرا نرسیده است.',
+                ], 422);
+            }
+            if ($shift->end_time && $now->isAfter($shift->end_time)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'زمان برگزاری نوبت (شیفت) آزمون شما به پایان رسیده است.',
+                ], 422);
+            }
+        }
+
         $maxSnapshotRetries = 3;
 
         for ($try = 1; $try <= $maxSnapshotRetries; $try++) {
-            // ۱. خواندن اسنپ‌شات اولیه خارج از تراکنش
+            // خواندن اسنپ‌شات اولیه خارج از تراکنش
             $snapshotAssignment = CandidateAssignment::with(['exam', 'computer', 'shift'])
                 ->where('candidate_id', $candidate->id)
                 ->whereHas('exam', fn ($q) => $q->whereIn('status', ['published', 'running']))
-                ->latest()
+                ->latest('id')
                 ->first();
 
             if (!$snapshotAssignment) {

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Badge, Button, Spinner } from '../../components/ui/index.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { api, API_BASE } from '../../lib/api.js';
+import { notifyError } from '../../lib/notify.js';
 
 export default function ExamInstructionsPage() {
   const { user } = useAuth();
@@ -36,6 +37,9 @@ export default function ExamInstructionsPage() {
     if (!agreed || !readiness?.can_start) return;
     setStarting(true);
     try {
+      // ارسال درخواست واقعی به بک‌اند برای اعتبارسنجی تمام شروط سروری و ایجاد یا بازیابی Attempt
+      await api.post(`${API_BASE}/candidate/attempts/start`);
+
       if (document.documentElement.requestFullscreen) {
         try {
           await document.documentElement.requestFullscreen();
@@ -44,6 +48,9 @@ export default function ExamInstructionsPage() {
         }
       }
       navigate('/candidate/exam');
+    } catch (err) {
+      const msg = err.response?.data?.message || err.apiMessage || 'امکان شروع آزمون وجود ندارد.';
+      notifyError(msg);
     } finally {
       setStarting(false);
     }
